@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+.venv/
+# Transcripts de session : ils contiennent des chemins et du contenu personnels.
+# Le corpus de test est LU depuis ~/.claude, jamais copié dans le dépôt.
+*.jsonl
