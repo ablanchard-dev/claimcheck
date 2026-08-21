@@ -332,8 +332,19 @@ def main():
             pass
 
     if "--hook" in sys.argv:
-        payload = json.load(sys.stdin)
-        text = payload.get("last_assistant_message", "") or ""
+        # Un hook qui PLANTE est pire qu'un hook muet : il affiche une erreur à chaque fin
+        # de tour, il est désinstallé dans la journée, et plus rien n'est vérifié du tout.
+        # Toute entrée dégradée — stdin vide, JSON cassé, racine qui n'est pas un objet —
+        # se traduit donc par un silence, jamais par une erreur ni par un blocage.
+        try:
+            payload = json.load(sys.stdin)
+        except (ValueError, OSError):
+            sys.exit(0)
+        if not isinstance(payload, dict):
+            sys.exit(0)
+        text = payload.get("last_assistant_message") or ""
+        if not isinstance(text, str):
+            sys.exit(0)
 
         # La v1 ne lisait QUE `last_assistant_message`. Sans les sorties d'outil du tour,
         # aucune affirmation n'est étayable : tout tombait en « non vérifiable » et le hook

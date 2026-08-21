@@ -65,6 +65,8 @@ kind that is the correct direction to be wrong in.
 | Mutation proof (`test_mutation.py`) | 12/12 |
 | Hook, real JSON on stdin | 5/5 |
 | False positives on a real session transcript | 0 |
+| Hostile conditions (`test_robustesse.py`) | 17/17 |
+| Hook cost on a 4000-output transcript | 0.10 s |
 | Coverage | 67% of what is checkable, 37% of all numeric sentences |
 
 `check_all.py` re-derives every figure in that table and fails if the README has
@@ -88,6 +90,11 @@ Hook mode reads `last_assistant_message` and `transcript_path`, and emits
 `{"decision": "block", "reason": ...}` when a claim is contradicted. Nothing otherwise.
 
 Requires Python 3.8+. No dependencies.
+
+**It never crashes and never blocks on degraded input.** Missing transcript, empty
+file, invalid JSON, malformed stdin, absent message, accented path: every one of
+those is a silence, not an error and not an accusation. A hook that throws at every
+turn end is uninstalled the same day, and then nothing is checked at all.
 
 ## Known limits
 

@@ -86,6 +86,18 @@ def banc_hook():
     return n, len(cas)
 
 
+def banc_robustesse():
+    """Les conditions hostiles vivent dans leur propre fichier, mais elles sont rejouees
+    ICI : une suite qu'on doit penser a lancer separement finit par ne plus etre lancee."""
+    print("\n2b. Conditions hostiles")
+    r = subprocess.run([sys.executable, "test_robustesse.py"], cwd=ICI,
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
+    lignes = [l for l in (r.stdout or "").splitlines() if l.strip()]
+    m = re.search(r"(\d+)/(\d+)", lignes[-1] if lignes else "")
+    detail = f"{m.group(1)}/{m.group(2)}" if m else "sortie illisible"
+    bilan("test_robustesse.py", r.returncode == 0, detail)
+
+
 def banc_corpus():
     print("\n3. Corpus réel : aucun faux positif")
     if not os.path.exists(TRANSCRIPT):
@@ -145,6 +157,7 @@ def main():
     print("=== claimcheck — banc complet ===")
     _, mut, tot_mut = banc_mutation()
     hook_ok, hook_tot = banc_hook()
+    banc_robustesse()
     tours, verif, total = banc_corpus()
     if tours is not None:
         banc_readme(mut, tot_mut, hook_ok, hook_tot, tours, verif, total)
