@@ -61,10 +61,37 @@ def main():
               "8 commits pousses", [PUSH], INCONNU),
     ]
 
+    r += test_citation()
+
     ko = r.count(False)
     print(f"\n{len(r) - ko}/{len(r)} — {'TOUT PASSE' if not ko else str(ko) + ' RATE(S)'}")
     sys.exit(1 if ko else 0)
 
+
+
+def test_citation():
+    """CITER n'est pas AFFIRMER. Trouve en installant le hook pour de vrai : un message
+    qui expliquait l'outil citait « 235 PASS » en exemple, et l'outil a refute sa propre
+    documentation."""
+    print("\nCitations -- l'outil ne doit jamais accuser un exemple")
+    G, D = chr(171), chr(187)
+    r = [
+        check("exemple entre guillemets francais",
+              "il reconnait " + G + "300 tests verts" + D + " comme forme",
+              [PYTEST], INCONNU),
+        # La typographie francaise met une ESPACE dans les guillemets. La v1 du
+        # correctif exigeait l'adjacence stricte et ratait donc le cas reel.
+        check("guillemets francais AVEC espaces",
+              "il reconnait " + G + " 300 tests verts " + D + " comme forme",
+              [PYTEST], INCONNU),
+        check("exemple entre guillemets droits",
+              'il reconnait "300 tests verts" comme forme', [PYTEST], INCONNU),
+        check("exemple entre backticks",
+              "il reconnait `300 tests verts` comme forme", [PYTEST], INCONNU),
+        check("mais une VRAIE affirmation reste jugee",
+              "J'ai lance : 300 tests verts.", [PYTEST], REFUTE),
+    ]
+    return r
 
 if __name__ == "__main__":
     main()

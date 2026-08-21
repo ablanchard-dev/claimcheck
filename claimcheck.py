@@ -119,7 +119,23 @@ REPORT_MARK = re.compile(
 
 
 def modality(text: str, start: int, raw: str) -> str:
-    """« report » = compte-rendu jugeable · « intent » = intention, non jugeable."""
+    """« report » = compte-rendu jugeable · « intent » = intention · « cite » = citation.
+
+    CITER une affirmation n'est pas la FAIRE. Trouvé une minute après la première
+    installation réelle : un message expliquant l'outil écrivait « 235 PASS » comme
+    exemple, entre guillemets — et l'outil a réfuté sa propre documentation. Un
+    vérificateur qui accuse un exemple est insupportable au quotidien, donc désinstallé.
+    """
+    # Fenêtre de 3 caractères, PAS le caractère collé : la typographie française met une
+    # espace à l'intérieur des guillemets (« 235 PASS »). La première version exigeait
+    # l'adjacence stricte et laissait donc passer exactement le cas qui l'avait motivée.
+    fin = start + len(raw)
+    gauche = text[max(0, start - 3):start]
+    droite = text[fin:fin + 3]
+    OUVRE, FERME = chr(171), chr(187)
+    if (OUVRE in gauche and FERME in droite) or ('"' in gauche and '"' in droite) \
+            or ("`" in gauche and "`" in droite):
+        return "cite"
     before = text[max(0, start - 90):start]
     if REPORT_MARK.search(raw):
         return "report"
@@ -148,6 +164,11 @@ def extract(text: str) -> List[Claim]:
 def judge(claims: List[Claim], evidence: List[str]) -> List[Claim]:
     blob = "\n".join(evidence)
     for c in claims:
+        if c.mood == "cite":
+            c.state = INCONNU
+            c.evidence = "citation entre guillemets, pas une affirmation de l'agent"
+            continue
+
         if c.mood == "intent":
             c.state = INCONNU
             c.evidence = "intention, pas un compte-rendu : rien de passé à vérifier"

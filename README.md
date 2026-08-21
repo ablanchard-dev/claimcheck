@@ -62,16 +62,18 @@ kind that is the correct direction to be wrong in.
 
 | Bench | Result |
 |---|---|
-| Mutation proof (`test_mutation.py`) | 12/12 |
+| Mutation proof (`test_mutation.py`) | 17/17 |
 | Hook, real JSON on stdin | 5/5 |
 | False positives on a real session transcript | 0 |
 | Hostile conditions (`test_robustesse.py`) | 17/17 |
 | Hook cost on a 4000-output transcript | 0.10 s |
-| Coverage | 67% of what is checkable, 37% of all numeric sentences |
+| Coverage | printed at every run, on both denominators |
 
 `check_all.py` re-derives every figure in that table and fails if the README has
-drifted. The turn count was deliberately dropped from it: the transcript keeps
-growing, so a fixed count went stale within the hour — the bench caught it.
+drifted. Two figures were deliberately dropped from it — the turn count and the
+coverage percentage: both depend on a transcript that keeps growing, and both went
+stale within the hour. The bench caught them. A number nobody can keep true is not
+information, it is a trap; the tool prints the live one instead.
 
 The mutation proof exists because the tool found nothing on healthy data. A detector that
 detects nothing on its only corpus is not proven, it is untested — you have to fabricate the

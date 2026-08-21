@@ -133,8 +133,6 @@ def banc_readme(mut, tot_mut, hook_ok, hook_tot, tours, verif, total):
 
     annonce(r"Mutation proof.*?\|\s*(\d+)/\d+", mut, "compte de mutation")
     annonce(r"Hook, real JSON on stdin\s*\|\s*(\d+)/\d+", hook_ok, "compte du hook")
-    annonce(r"(\d+)% of what is checkable", verif, "couverture du vérifiable")
-    annonce(r"(\d+)% of all numeric sentences", total, "couverture du total")
 
 
 def banc_tells():
