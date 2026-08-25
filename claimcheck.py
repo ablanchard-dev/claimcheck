@@ -53,7 +53,13 @@ PATTERNS = [
     # « 81 verts », « 141 verts » — la forme la PLUS fréquente à l'usage, et celle que la
     # v1 ratait entièrement parce qu'elle exigeait le mot « tests ». Mesuré sur corpus réel :
     # à elle seule elle représentait la moitié des affirmations chiffrées non reconnues.
-    ("bare_green", re.compile(r"\b(\d{1,5})\s+verts?\b", re.I)),
+    # Le separateur de milliers francais est une ESPACE : « 2 340 verts ». Sans la
+    # premiere alternative, \b(\d{1,5}) capture « 340 » et l'outil juge un nombre que
+    # PERSONNE n'a affirme -- il accuse a tort, ce qui est le pire defaut possible ici.
+    # Espace ordinaire, insecable (U+00A0) et insecable etroite (U+202F) : dotnet,
+    # PowerShell et les .md d'Alex emettent les trois.
+    ("bare_green", re.compile(
+        r"\b(\d{1,3}(?:[   ]\d{3})+|\d{1,5})\s+verts?\b", re.I)),
     # « 0 fail », « 0 échec », « aucune erreur »
     ("zero_fail", re.compile(r"\b0\s*(?:fail|failed|échecs?|erreurs?)\b", re.I)),
     # « 8 dépôts poussés », « 9 commits poussés »
@@ -151,6 +157,13 @@ def extract(text: str) -> List[Claim]:
         for m in rx.finditer(text or ""):
             # Une alternance peut avoir plusieurs groupes dont un seul est rempli.
             val = next((g for g in m.groups() if g), m.group(0)) if m.groups() else m.group(0)
+            # « 2 340 » et « 2340 » sont le MEME nombre. On retire le separateur de
+            # milliers AVANT toute comparaison : sinon on cherche « 2 340 » dans une
+            # sortie qui contient « 2340 », on ne le trouve pas, et on refute une
+            # affirmation vraie. Le sous-groupe de 3 chiffres borne la substitution :
+            # « 12 tests » n'est pas touche.
+            if val:
+                val = re.sub(r"(?<=\d)[   ](?=\d{3}(?!\d))", "", val)
             key = (kind, val)
             if key in seen:
                 continue

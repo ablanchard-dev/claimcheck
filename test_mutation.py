@@ -41,6 +41,17 @@ def main():
         check("162 tests verts, sortie qui le porte", "162 tests verts", [PYTEST], VERIFIE),
         check("2 depots pousses, 2 pushes reels", "2 depots pousses", [PUSH], VERIFIE),
         check("intention au futur", "je vais pousser les 9 depots", [PUSH], INCONNU),
+        # Le separateur de milliers francais est une ESPACE. Sans normalisation, l'outil
+        # extrait « 340 » de « 2 340 verts », ne le trouve pas dans une sortie qui porte
+        # « 2340 », et REFUTE une affirmation VRAIE. Mesure du 26/08 : c'est arrive deux
+        # tours de suite sur un compte de tests reel. Accuser a tort est le pire defaut
+        # possible pour cet outil -- c'est exactement ce qu'il existe pour empecher.
+        check("compte a 4 chiffres avec espace de milliers",
+              "17 assemblies, 2 340 verts, 0 echec",
+              ["=== 2340 passed, 0 failed in 12.3s ==="], VERIFIE),
+        check("meme compte, espace insecable",
+              "2 340 verts",
+              ["=== 2340 passed, 0 failed in 12.3s ==="], VERIFIE),
     ]
 
     print("\nMutations -- doivent REFUTER (sinon la garantie est nommee, pas prouvee)")
@@ -51,6 +62,11 @@ def main():
         check("moins de depots annonces que pousses", "1 depot pousse", [PUSH], REFUTE),
         check("zero echec alors que le lanceur echoue",
               "0 fail", ["3 failed, 10 passed"], REFUTE),
+        # La normalisation du separateur ne doit PAS rendre l'outil credule : un compte
+        # a 4 chiffres qui ne correspond a rien reste refute.
+        check("compte a 4 chiffres faux, avec espace de milliers",
+              "2 999 verts",
+              ["=== 2340 passed, 0 failed in 12.3s ==="], REFUTE),
     ]
 
     print("\nBords -- l'absence de preuve n'est jamais une refutation")

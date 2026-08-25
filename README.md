@@ -62,7 +62,7 @@ kind that is the correct direction to be wrong in.
 
 | Bench | Result |
 |---|---|
-| Mutation proof (`test_mutation.py`) | 17/17 |
+| Mutation proof (`test_mutation.py`) | 20/20 |
 | Hook, real JSON on stdin | 5/5 |
 | False positives on a real session transcript | 0 |
 | Hostile conditions (`test_robustesse.py`) | 17/17 |
