@@ -95,6 +95,18 @@ RUNNER_SUMMARY = re.compile(
     r"\d+\s*(?:tests?|PASS|passed|FAIL|failed|erreurs?|errors?|items?)"
     r"|(?:passed|failed|collected|PASS|FAIL|BILAN)\W{0,3}\d+", re.I)
 PUSH_OK = re.compile(r"->\s*main|\bmain -> main\b|Everything up-to-date|\.\.[0-9a-f]{7,}")
+# PUSH_OK reste INCHANGÉ (c'est l'instrument), mais il souffre du MÊME défaut que RUNNER :
+# son alternative `->\s*main` matche de la PROSE. Mesuré le 18/09 — cette phrase, qui dit
+# explicitement le contraire, faisait accuser :
+#     « je bascule la branche feature -> main demain, rien n'est pousse »
+# Pire, deux mentions en prose peuvent faire VÉRIFIER une affirmation par coïncidence.
+#
+# Une vraie ligne de sortie `git push` porte toujours un marqueur que la prose n'a pas :
+# une plage de SHA, « [new branch] », « [up to date] », ou « Everything up-to-date ».
+# On exige ce marqueur avant de compter un push — même principe que RUNNER_SUMMARY.
+PUSH_REAL = re.compile(
+    r"\.\.[0-9a-f]{7,}|Everything up-to-date|\[new branch\]|\[up to date\]|"
+    r"\[new tag\]|\[deleted\]|\* \[new", re.I)
 
 
 def _text_blocks(msg) -> str:
@@ -232,7 +244,7 @@ def judge(claims: List[Claim], evidence: List[str]) -> List[Claim]:
             # comptent deux fois). L'unité juste est **la ligne de mise à jour de
             # référence** : un push réussi en écrit exactement une.
             # Les deux erreurs d'unité ont été trouvées par mutation, pas par relecture.
-            n = sum(1 for e in evidence for ln in e.splitlines() if PUSH_OK.search(ln))
+            n = sum(1 for e in evidence for ln in e.splitlines() if PUSH_REAL.search(ln))
             if n == 0:
                 c.state, c.evidence = INCONNU, "aucune sortie de push dans ce tour"
             elif str(n) == c.value:
