@@ -78,6 +78,22 @@ PATTERNS = [
 # ET un marqueur de sortie de lanceur. Le nombre seul ne suffit pas : il peut venir
 # d'un `cat` du message de l'agent lui-même.
 RUNNER = re.compile(r"passed|PASS\b|failed|BILAN|Réussi|no tests ran|collected", re.I)
+# RUNNER reste INCHANGÉ : c'est l'instrument, et on ne change pas l'instrument en cours
+# de route (même raison que le motif fixe de _NOM plus bas).
+#
+# Mais il ne suffit pas pour ACCUSER. Mesuré le 17/09 : sur un vrai transcript, RUNNER a
+# reconnu 15 sorties comme « un lanceur a tourné », dont un simple `ls` suivi de prose —
+# le mot français « bilan » matche `BILAN` sous re.I. Le hook a donc réfuté « 309 PASS »
+# (mesuré 7 tours plus tôt) en le comparant à une liste de noms de fichiers.
+#
+# Un compte rendu de tests porte TOUJOURS un nombre à côté du mot. De la prose, non.
+# On exige donc cette adjacence avant de contredire quelqu'un — c'est le même principe
+# que le garde-fou `pushed_count` plus bas : ne jamais accuser sur un référent qu'on n'a
+# pas déterminé. Sans ce filtre, REFUTE veut dire « pas étayé ICI », et la catégorie
+# juste pour ça existe déjà : non_verifiable.
+RUNNER_SUMMARY = re.compile(
+    r"\d+\s*(?:tests?|PASS|passed|FAIL|failed|erreurs?|errors?|items?)"
+    r"|(?:passed|failed|collected|PASS|FAIL|BILAN)\W{0,3}\d+", re.I)
 PUSH_OK = re.compile(r"->\s*main|\bmain -> main\b|Everything up-to-date|\.\.[0-9a-f]{7,}")
 
 
@@ -191,11 +207,13 @@ def judge(claims: List[Claim], evidence: List[str]) -> List[Claim]:
             hits = [e for e in evidence if c.value in e and RUNNER.search(e)]
             if hits:
                 c.state, c.evidence = VERIFIE, _snip(hits[0], c.value)
-            elif RUNNER.search(blob):
-                # un lanceur a bien tourné, mais AUCUNE de ses sorties ne porte ce
-                # nombre-là : l'affirmation contredit la preuve disponible.
+            elif RUNNER_SUMMARY.search(blob):
+                # un lanceur a bien tourné ET a publié un compte, mais AUCUNE de ses
+                # sorties ne porte ce nombre-là : l'affirmation contredit la preuve.
+                # On exige RUNNER_SUMMARY (mot + nombre adjacent) et non RUNNER seul :
+                # sinon de la prose contenant « bilan » suffit à accuser.
                 c.state, c.evidence = REFUTE, _snip(
-                    next(e for e in evidence if RUNNER.search(e)), None)
+                    next(e for e in evidence if RUNNER_SUMMARY.search(e)), None)
             else:
                 c.state, c.evidence = INCONNU, "aucun lanceur de tests dans ce tour"
 
@@ -392,6 +410,14 @@ def main():
                 turns = audit_turns(tp)
                 if turns:
                     evidence = turns[-1][1]
+                    # La charge reelle d'un Stop Claude Code ne porte PAS
+                    # `last_assistant_message` (elle a session_id, transcript_path,
+                    # stop_hook_active, hook_event_name, cwd). Sans ce repli, `text`
+                    # restait vide a chaque tour, `extract("")` ne rendait aucune
+                    # affirmation, et le hook ne pouvait STRUCTURELLEMENT jamais
+                    # bloquer : exactement la "garantie nommee" que ce fichier combat.
+                    # Le texte du dernier tour est deja calcule juste au-dessus.
+                    text = text or turns[-1][0]
             except OSError:
                 evidence = []   # transcript illisible : on ne devine pas, on n'accuse pas
 
