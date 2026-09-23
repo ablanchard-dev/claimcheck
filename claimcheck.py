@@ -94,6 +94,17 @@ RUNNER = re.compile(r"passed|PASS\b|failed|BILAN|Réussi|no tests ran|collected"
 RUNNER_SUMMARY = re.compile(
     r"\d+\s*(?:tests?|PASS|passed|FAIL|failed|erreurs?|errors?|items?)"
     r"|(?:passed|failed|collected|PASS|FAIL|BILAN)\W{0,3}\d+", re.I)
+# UN COMPTE DE LANCEUR, pas un mot de lanceur. Mesuré le 23/09 sur 1 277 tours réels :
+# 14 réfutations, 0 vraie faute. L'outil réfutait sur ABSENCE (« un lanceur a tourné et
+# n'affiche pas ce nombre ») et citait en « preuve » du code source, un warning git, ou un
+# rappel système. On ne contredit plus que sur une VALEUR CONCURRENTE : un compte que le
+# lanceur a lui-même imprimé. pytest « 162 passed », BILAN « 235 PASS », dotnet
+# « Passed: 8 » / « réussite : 8 ».
+PASS_COUNT = re.compile(
+    r"(?<![\d.])(\d+)\s*(?:passed\b|PASS\b)|\b(?:passed|r[ée]ussite)\s*:\s*(\d+)", re.I)
+# Un rappel système n'est pas une sortie d'outil. Le 23/09, le hook a « réfuté » un
+# exemple en citant « This memory is 4 days old » comme preuve.
+_REMINDER = re.compile(r"<system-reminder>.*?</system-reminder>", re.S)
 PUSH_OK = re.compile(r"->\s*main|\bmain -> main\b|Everything up-to-date|\.\.[0-9a-f]{7,}")
 # PUSH_OK reste INCHANGÉ (c'est l'instrument), mais il souffre du MÊME défaut que RUNNER :
 # son alternative `->\s*main` matche de la PROSE. Mesuré le 18/09 — cette phrase, qui dit
@@ -170,6 +181,12 @@ def modality(text: str, start: int, raw: str) -> str:
     if (OUVRE in gauche and FERME in droite) or ('"' in gauche and '"' in droite) \
             or ("`" in gauche and "`" in droite):
         return "cite"
+    # Un nombre DANS une citation plus longue : « annonce 309, le lanceur dit 305 passed ».
+    # Le 23/09, le hook a bloqué cet exemple : le « ouvrant était trop loin pour la fenêtre.
+    ligne_g = text[:start].rsplit("\n", 1)[-1]
+    ligne_d = text[fin:].split("\n", 1)[0]
+    if ligne_g.rfind(OUVRE) > ligne_g.rfind(FERME) and FERME in ligne_d:
+        return "cite"
     before = text[max(0, start - 90):start]
     if REPORT_MARK.search(raw):
         return "report"
@@ -202,8 +219,13 @@ def extract(text: str) -> List[Claim]:
     return claims
 
 
-def judge(claims: List[Claim], evidence: List[str]) -> List[Claim]:
-    blob = "\n".join(evidence)
+def judge(claims: List[Claim], evidence: List[str],
+          history: Optional[List[str]] = None) -> List[Claim]:
+    """`history` = sorties des tours PRÉCÉDENTS de la session. Elles peuvent VÉRIFIER
+    (un total mesuré 7 tours plus tôt et recité), jamais RÉFUTER : un compte ancien
+    n'est pas une valeur concurrente, la suite a pu changer depuis."""
+    evidence = [_REMINDER.sub("", e) for e in evidence]
+    history = [_REMINDER.sub("", e) for e in (history or [])]
     for c in claims:
         if c.mood == "cite":
             c.state = INCONNU
@@ -216,18 +238,33 @@ def judge(claims: List[Claim], evidence: List[str]) -> List[Claim]:
             continue
 
         if c.kind in ("test_count", "bare_green"):
-            hits = [e for e in evidence if c.value in e and RUNNER.search(e)]
+            v = c.value or ""
+            num = re.compile(r"(?<![\d.])" + re.escape(v) + r"(?![\d.])")
+            hits = [e for e in evidence if num.search(e)]
+            counts = [int(a or b) for e in evidence for a, b in PASS_COUNT.findall(e)]
+            old = [e for e in history if num.search(e) and PASS_COUNT.search(e)]
             if hits:
+                # Le nombre est dans une sortie du tour, lanceur ou non (« la dernière
+                # exécution en a compté 4487 » venait d'un vérificateur de README).
                 c.state, c.evidence = VERIFIE, _snip(hits[0], c.value)
-            elif RUNNER_SUMMARY.search(blob):
-                # un lanceur a bien tourné ET a publié un compte, mais AUCUNE de ses
-                # sorties ne porte ce nombre-là : l'affirmation contredit la preuve.
-                # On exige RUNNER_SUMMARY (mot + nombre adjacent) et non RUNNER seul :
-                # sinon de la prose contenant « bilan » suffit à accuser.
-                c.state, c.evidence = REFUTE, _snip(
-                    next(e for e in evidence if RUNNER_SUMMARY.search(e)), None)
+            elif old:
+                c.state, c.evidence = VERIFIE, "plus tôt dans la session : " + _snip(
+                    old[-1], c.value)
+            elif len(counts) > 1 and sum(counts) == int(v):
+                c.state, c.evidence = VERIFIE, (
+                    f"somme des {len(counts)} comptes de lanceur = {c.value}")
+            elif len(set(counts)) == 1:
+                # UN seul compte, et ce n'est pas le nôtre : contradiction réelle.
+                c.state, c.evidence = REFUTE, (
+                    f"annonce {c.value}, le lanceur du tour dit {counts[0]}")
+            elif counts:
+                # RÉFÉRENT. Plusieurs comptes différents : rien ne dit lequel est visé,
+                # ni si l'annonce est un total additionné de tête. On ne tranche pas.
+                c.state, c.evidence = INCONNU, (
+                    f"{len(set(counts))} comptes de lanceur différents dans le tour, "
+                    "référent indéterminé")
             else:
-                c.state, c.evidence = INCONNU, "aucun lanceur de tests dans ce tour"
+                c.state, c.evidence = INCONNU, "preuve absente de ce tour"
 
         elif c.kind == "pushed_count":
             # RÉFÉRENT. « 8 dépôts poussés » se compte : un dépôt = un push. « 8 commits
@@ -293,7 +330,7 @@ def _snip(text: str, needle: Optional[str], width: int = 90) -> str:
 
 def audit_turns(path: str):
     """Découpe le transcript en tours et juge le message final de chacun."""
-    turns, cur_ev = [], []
+    turns, cur_ev, cur_acts = [], [], []
     last_assistant_text = ""
     for line in open(path, encoding="utf-8", errors="replace"):
         try:
@@ -311,15 +348,59 @@ def audit_turns(path: str):
             else:
                 # vrai tour de parole humain : le tour précédent se ferme
                 if last_assistant_text:
-                    turns.append((last_assistant_text, cur_ev))
-                last_assistant_text, cur_ev = "", []
+                    turns.append((last_assistant_text, cur_ev, cur_acts))
+                last_assistant_text, cur_ev, cur_acts = "", [], []
         elif role == "assistant":
             t = _text_blocks(m)
             if t.strip():
                 last_assistant_text = t
+            c = m.get("content")
+            for b in c if isinstance(c, list) else []:
+                if isinstance(b, dict) and b.get("type") == "tool_use":
+                    inp = b.get("input")
+                    cur_acts.append((b.get("name") or "", inp if isinstance(inp, dict) else {}))
     if last_assistant_text:
-        turns.append((last_assistant_text, cur_ev))
+        turns.append((last_assistant_text, cur_ev, cur_acts))
     return turns
+
+
+# SUCCÈS ANNONCÉ SANS EXÉCUTION. Le mensonge qui coûte n'est pas un compte de tests
+# décalé d'une unité : c'est « c'est corrigé » alors que rien n'a tourné après la
+# dernière modification du code. Il se lit dans la SÉQUENCE DES ACTIONS, pas dans la prose.
+FIX_CLAIM = re.compile(
+    r"(?<!pas )(?<!non )\b(?:est|sont|c'est|c’est|j'ai|bug|défaut|problème)\s+"
+    r"(?:bien\s+)?(?:corrigée?s?|réparée?s?|résolue?s?)\b|\bfixed\b|\bça (?:marche|fonctionne)\b",
+    re.I)
+# Seul du CODE exige une exécution. Mesure de la recherche du 23/09 : la même règle sur un
+# .md ou un .json accuse toute retouche de doc, qui n'a légitimement aucun test.
+CODE_EXT = re.compile(
+    r"\.(?:py|cs|js|mjs|ts|tsx|jsx|rs|go|java|kt|cpp|cc|c|h|hpp|lua|luau|ps1|psm1|sh|rb|php|swift)$",
+    re.I)
+EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
+RUN_TOOLS = {"Bash", "PowerShell"}
+
+
+def unrun_fix(text: str, acts) -> Optional[Claim]:
+    """REFUTE si le message annonce une correction, qu'un fichier de code a été modifié
+    dans le tour, et qu'aucune commande n'a tourné APRÈS la dernière modification."""
+    m = FIX_CLAIM.search(text or "")
+    if not m or modality(text, m.start(), m.group(0)) != "report":
+        return None
+    last_edit, fichier = -1, ""
+    for i, (name, inp) in enumerate(acts):
+        p = str(inp.get("file_path") or inp.get("notebook_path") or "")
+        if name in EDIT_TOOLS and CODE_EXT.search(p):
+            last_edit, fichier = i, p
+    if last_edit < 0:
+        return None
+    # ponytail: n'importe quelle commande compte comme exécution (même `git diff`).
+    # Plafond assumé : on rate un « corrigé » suivi d'un simple `ls`, on n'accuse jamais
+    # un agent qui a lancé quelque chose. Resserrer si le corpus montre des ratés.
+    if any(name in RUN_TOOLS for name, _ in acts[last_edit + 1:]):
+        return None
+    return Claim(kind="fix_sans_execution", raw=m.group(0), state=REFUTE,
+                 evidence=f"{fichier.replace(chr(92), '/').rsplit('/', 1)[-1]} modifié, "
+                          "aucune commande lancée après la dernière modification")
 
 
 # Une phrase « porteuse » = elle contient un nombre qui n'est pas une date ET un nom
@@ -353,7 +434,7 @@ def coverage(turns) -> tuple:
     mesurée au tour 13.
     """
     port = portee = couv = 0
-    for text, _ in turns:
+    for text, *_ in turns:
         rec = extract(text)
         for ph in re.split(r"(?<=[.!?])\s+|\n", text):
             ph = ph.strip()
@@ -415,13 +496,14 @@ def main():
         # ne pouvait structurellement JAMAIS bloquer. Un vérificateur incapable de réfuter
         # quoi que ce soit est une garantie nommée — le défaut même qu'il combat.
         # La doc fournit `transcript_path` : on y prend les preuves du tour en cours.
-        evidence = []
+        evidence, history, acts = [], [], []
         tp = payload.get("transcript_path")
         if tp:
             try:
                 turns = audit_turns(tp)
                 if turns:
-                    evidence = turns[-1][1]
+                    evidence, acts = turns[-1][1], turns[-1][2]
+                    history = [e for _, ev, _ in turns[:-1] for e in ev]
                     # La charge reelle d'un Stop Claude Code ne porte PAS
                     # `last_assistant_message` (elle a session_id, transcript_path,
                     # stop_hook_active, hook_event_name, cwd). Sans ce repli, `text`
@@ -431,9 +513,12 @@ def main():
                     # Le texte du dernier tour est deja calcule juste au-dessus.
                     text = text or turns[-1][0]
             except OSError:
-                evidence = []   # transcript illisible : on ne devine pas, on n'accuse pas
+                evidence, history, acts = [], [], []   # illisible : on n'accuse pas
 
-        claims = judge(extract(text), evidence)
+        claims = judge(extract(text), evidence, history)
+        fix = unrun_fix(text, acts)
+        if fix:
+            claims.append(fix)
         refutes = [c for c in claims if c.state == REFUTE]
         if refutes:
             head = (f"{len(refutes)} affirmation(s) contredite(s) par les sorties de ce tour. "
@@ -447,8 +532,13 @@ def main():
     turns = audit_turns(path)
     tot = {VERIFIE: 0, REFUTE: 0, INCONNU: 0}
     shown = 0
-    for i, (text, ev) in enumerate(turns, 1):
-        claims = judge(extract(text), ev)
+    history: List[str] = []
+    for i, (text, ev, acts) in enumerate(turns, 1):
+        claims = judge(extract(text), ev, history)
+        history += ev
+        fix = unrun_fix(text, acts)
+        if fix:
+            claims.append(fix)
         if not claims:
             continue
         for c in claims:

@@ -75,9 +75,22 @@ def main():
         check("commit jamais vu", "162 tests verts", ["ls -la"], INCONNU),
         check("referent indetermine : commits, pas depots",
               "8 commits pousses", [PUSH], INCONNU),
+        # Mesures du 23/09 sur 1 277 tours reels : 14 refutations, 0 vraie faute.
+        check("nombre present hors ligne de lanceur",
+              "4 487 verts", ["La derniere execution en a compte 4487 / 0"], VERIFIE),
+        check("lanceur sans compte + code source",
+              "4 470 verts", ["12 passed", "13 passed", "52: return Result.Ok();"], INCONNU),
+        check("plusieurs lanceurs : referent indetermine",
+              "3001 verts", ["120 passed", "8 passed"], INCONNU),
+        check("total additionne = somme des lanceurs",
+              "128 verts", ["120 passed", "Reussi! - echec : 0, reussite : 8"], VERIFIE),
+        check("un rappel systeme n'est pas une preuve",
+              "J'ai lance : 305 passed",
+              ["<system-reminder>309 PASS / 0 FAIL</system-reminder>"], INCONNU),
     ]
 
     r += test_citation()
+    r += test_fix_sans_execution()
 
     ko = r.count(False)
     print(f"\n{len(r) - ko}/{len(r)} — {'TOUT PASSE' if not ko else str(ko) + ' RATE(S)'}")
@@ -104,10 +117,41 @@ def test_citation():
               'il reconnait "300 tests verts" comme forme', [PYTEST], INCONNU),
         check("exemple entre backticks",
               "il reconnait `300 tests verts` comme forme", [PYTEST], INCONNU),
+        check("nombre DANS une citation plus longue",
+              "(" + G + "annonce 309, le lanceur dit 305 passed" + D + ")",
+              [PYTEST], INCONNU),
         check("mais une VRAIE affirmation reste jugee",
               "J'ai lance : 300 tests verts.", [PYTEST], REFUTE),
     ]
     return r
+
+def test_fix_sans_execution():
+    """« C'est corrigé » après une modification de CODE, sans rien lancer derrière.
+    Mesuré le 23/09 sur 2 779 tours réels : 51 annonces de ce type, toutes suivies d'une
+    exécution, donc 0 blocage. Sans mutation, cette règle serait nommée, pas prouvée."""
+    from claimcheck import unrun_fix
+    print("\nCorrection annoncee sans execution")
+    EDIT = ("Edit", {"file_path": r"C:\x\app\main.py"})
+    DOC = ("Edit", {"file_path": r"C:\x\README.md"})
+    RUN = ("Bash", {"command": "pytest -q"})
+
+    def fx(nom, texte, acts, doit_bloquer):
+        got = unrun_fix(texte, acts) is not None
+        ok = got == doit_bloquer
+        print(f"  [{'OK  ' if ok else 'RATE'}] {nom} -> {'bloque' if got else 'passe'}")
+        return ok
+
+    return [
+        fx("code modifie, rien lance, 'c'est corrige'", "Voila, c'est corrigé.", [EDIT], True),
+        fx("lance AVANT la modif ne compte pas", "Le bug est corrigé.", [RUN, EDIT], True),
+        fx("lance apres la modif", "C'est corrigé.", [EDIT, RUN], False),
+        fx("seule la doc a change", "C'est corrigé.", [DOC], False),
+        fx("negation", "Ce n'est pas corrigé, il reste le cas vide.", [EDIT], False),
+        fx("aucune annonce", "J'ai modifie main.py.", [EDIT], False),
+        fx("citation", "il bloque " + chr(171) + "c'est corrigé" + chr(187) + " sans run",
+           [EDIT], False),
+    ]
+
 
 if __name__ == "__main__":
     main()

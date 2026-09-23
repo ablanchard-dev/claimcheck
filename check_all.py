@@ -18,8 +18,13 @@ import sys
 import tempfile
 
 ICI = os.path.dirname(os.path.abspath(__file__))
-TRANSCRIPT = (r"C:\Users\blanc\.claude\projects\C--Users-blanc"
-              r"\f3f76cf7-0caa-4aaa-b57f-6b8b13004952.jsonl")
+# Le corpus d'origine (f3f76cf7) a été supprimé : le banc rendait RATE sur un fichier
+# absent, pas sur l'outil. On prend la plus grosse session réelle présente, ou
+# CLAIMCHECK_CORPUS si on veut figer le corpus.
+_DOSSIER = r"C:\Users\blanc\.claude\projects\C--Users-blanc"
+TRANSCRIPT = os.environ.get("CLAIMCHECK_CORPUS") or max(
+    (os.path.join(_DOSSIER, f) for f in os.listdir(_DOSSIER) if f.endswith(".jsonl")),
+    key=os.path.getsize, default="")
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")

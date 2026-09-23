@@ -35,6 +35,23 @@ points at.
 **It never judges an intention.** "push the 9 repos" is a plan; "9 repos pushed" is a report.
 Only the second asserts anything about the past.
 
+**It never refutes on missing evidence.** A test count is refuted only by a *competing value*:
+a count the runner itself printed (`162 passed`, `235 PASS`, `réussite : 8`) that differs from
+the claim. No count in the turn means "no evidence here", never "false". Several runners with
+different counts means the referent is undetermined, unless their sum matches the claim. Earlier
+turns of the session can confirm a number, never refute it. The earlier rule refuted on absence;
+over 1,277 real turns that produced 14 refutations and none of them caught a real error.
+
+## What it blocks besides numbers
+
+"It's fixed", "ça marche", "bug corrigé" after a **code** file was edited in the turn and
+**no command ran after the last edit**. This is read from the sequence of tool calls, not from
+the wording of numbers. Documentation and config edits (`.md`, `.json`, ...) are exempt, since
+they have no test to run. Any command after the edit counts as execution. That is a deliberate
+ceiling: it can miss a "fixed" followed only by `ls`, but it never accuses an agent that ran
+something. Over 2,779 real turns there were 51 such announcements, all followed by a real run.
+So the rule blocked nothing there, and mutation tests confirm that it does fire.
+
 ## The ceiling, stated up front
 
 claimcheck verifies **only** claims whose evidence was produced in the turn. Not narration, not
@@ -42,11 +59,11 @@ citations, not durations, not anything checked elsewhere. Every run prints how m
 
 ```
 COUVERTURE
-  phrases chiffrées trouvées        : 27
-  dont vérifiables depuis ce tour   : 15
-  dont effectivement reconnues      : 10   (67% du vérifiable, 37% du total)
-  -> 5 affirmation(s) vérifiable(s) N'ONT PAS ÉTÉ REGARDÉES.
-  -> 12 hors portée par construction (narration, citations, durées).
+  phrases chiffrées trouvées        : 95
+  dont vérifiables depuis ce tour   : 94
+  dont effectivement reconnues      : 12   (13% du vérifiable, 13% du total)
+  -> 82 affirmation(s) vérifiable(s) N'ONT PAS ÉTÉ REGARDÉES.
+  -> 1 hors portée par construction (narration, citations, durées).
   « 0 réfuté » ne veut pas dire « tout est vrai ».
 ```
 
@@ -62,11 +79,12 @@ kind that is the correct direction to be wrong in.
 
 | Bench | Result |
 |---|---|
-| Mutation proof (`test_mutation.py`) | 20/20 |
+| Mutation proof (`test_mutation.py`) | 33/33 |
 | Hook, real JSON on stdin | 5/5 |
-| False positives on a real session transcript | 0 |
+| False positives on two real sessions (1,277 turns) | 0 (was 14) |
 | Hostile conditions (`test_robustesse.py`) | 17/17 |
 | Hook cost on a 4000-output transcript | 0.10 s |
+| Hook cost on a 111 MB transcript | 0.66 s |
 | Coverage | printed at every run, on both denominators |
 
 `check_all.py` re-derives every figure in that table and fails if the README has
