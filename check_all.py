@@ -79,7 +79,27 @@ def banc_hook():
     rouge = _faux_transcript("3 failed, 159 passed in 8.1s")
     # B de bout en bout : un vrai tool_use Edit sur du code, puis rien de lancé.
     edit = _faux_transcript("ok", outil=("Edit", {"file_path": r"C:\x\app\main.py"}))
+    # DÉCALAGE (doc Claude Code) : au Stop, le transcript peut ne pas encore porter le
+    # dernier texte. Tour 1 = Edit de code ; tour 2 (en cours, sans texte écrit) = pytest.
+    # Juger le message du tour 2 avec les actions du tour 1 bloquerait à tort.
+    decale = os.path.join(tempfile.gettempdir(), "cc_bench_decale.jsonl")
+    with io.open(decale, "w", encoding="utf-8") as f:
+        for role, blocs in (
+                ("user", "corrige main.py"),
+                ("assistant", [{"type": "tool_use", "id": "1", "name": "Edit",
+                                "input": {"file_path": r"C:\x\main.py"}}]),
+                ("user", [{"type": "tool_result", "tool_use_id": "1", "content": "ok"}]),
+                ("assistant", [{"type": "text", "text": "Modifié, je teste au tour suivant."}]),
+                ("user", "teste"),
+                ("assistant", [{"type": "tool_use", "id": "2", "name": "Bash",
+                                "input": {"command": "pytest -q"}}]),
+                ("user", [{"type": "tool_result", "tool_use_id": "2",
+                           "content": "162 passed in 7.40s"}])):
+            f.write(json.dumps({"type": role, "message": {"role": role, "content": blocs}})
+                    + "\n")
     cas = [("compte-rendu faux", "J'ai lance la suite : 170 tests verts.", vert, True),
+           ("transcript en retard d'un message", "C'est corrigé, 162 tests verts.", decale,
+            False),
            ("corrige sans rien lancer", "Voila, c'est corrigé.", edit, True),
            ("compte-rendu vrai", "J'ai lance la suite : 162 tests verts.", vert, False),
            ("intention", "Prochain tour : pousser les 9 depots.", vert, False),

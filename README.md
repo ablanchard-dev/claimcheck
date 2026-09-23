@@ -80,12 +80,12 @@ kind that is the correct direction to be wrong in.
 | Bench | Result |
 |---|---|
 | Mutation proof (`test_mutation.py`) | 41/41 |
-| Hook, real JSON on stdin | 6/6 |
+| Hook, real JSON on stdin | 7/7 |
 | False positives on two real sessions (1,277 turns) | 0 (was 14) |
 | False positives on all local sessions (378 files, 3,952 turns) | 0 (was 8 after the first fix) |
 | Hostile conditions (`test_robustesse.py`) | 17/17 |
 | Hook cost on a 4000-output transcript | 0.10 s |
-| Hook cost on a 111 MB transcript | 0.66 s |
+| Hook cost on a 111 MB transcript | 0.17 s (reads the last 8 MB; same verdict as a full read on all 384 local sessions) |
 | Coverage | printed at every run, on both denominators |
 
 `check_all.py` re-derives every figure in that table and fails if the README has

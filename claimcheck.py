@@ -361,11 +361,34 @@ def _snip(text: str, needle: Optional[str], width: int = 90) -> str:
     return " ".join(text[:width].split())
 
 
-def audit_turns(path: str):
-    """Découpe le transcript en tours et juge le message final de chacun."""
+# Fenêtre lue par le hook. L'historique (loi C) n'a rien vérifié de plus sur le corpus
+# complet que les sorties du tour : le borner ne coûte rien de mesuré.
+HOOK_TAIL = 8 * 1024 * 1024
+
+
+def _lines(path: str, tail: Optional[int]):
+    if not tail:
+        yield from open(path, encoding="utf-8", errors="replace")
+        return
+    with open(path, "rb") as f:
+        f.seek(0, 2)
+        size = f.tell()
+        f.seek(max(0, size - tail))
+        if size > tail:
+            f.readline()   # ligne coupée par le seek
+        for raw in f:
+            yield raw.decode("utf-8", errors="replace")
+
+
+def audit_turns(path: str, tail: Optional[int] = None):
+    """Découpe le transcript en tours et juge le message final de chacun.
+
+    `tail` : ne lire que les `tail` derniers octets. Le hook tourne à CHAQUE fin de
+    tour : 0,54 s mesurées sur une session de 111 Mo, dont 0,40 s de json.loads sur
+    des tours qui ne servent qu'à l'historique."""
     turns, cur_ev, cur_acts = [], [], []
     last_assistant_text = ""
-    for line in open(path, encoding="utf-8", errors="replace"):
+    for line in _lines(path, tail):
         try:
             d = json.loads(line)
         except Exception:
@@ -392,7 +415,11 @@ def audit_turns(path: str):
                 if isinstance(b, dict) and b.get("type") == "tool_use":
                     inp = b.get("input")
                     cur_acts.append((b.get("name") or "", inp if isinstance(inp, dict) else {}))
-    if last_assistant_text:
+    # DÉCALAGE. Au Stop, la doc prévient que le transcript peut ne pas encore porter le
+    # dernier texte. Le tour en cours n'a alors QUE des outils : le laisser tomber ferait
+    # juger le message d'aujourd'hui avec les actions du tour d'avant (un Edit ancien a
+    # bloqué un « corrigé » vrai, test du 23/09). Le texte vient alors du payload.
+    if last_assistant_text or cur_ev or cur_acts:
         turns.append((last_assistant_text, cur_ev, cur_acts))
     return turns
 
@@ -533,7 +560,7 @@ def main():
         tp = payload.get("transcript_path")
         if tp:
             try:
-                turns = audit_turns(tp)
+                turns = audit_turns(tp, tail=HOOK_TAIL)
                 if turns:
                     evidence, acts = turns[-1][1], turns[-1][2]
                     history = [e for _, ev, _ in turns[:-1] for e in ev]
