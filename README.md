@@ -83,6 +83,7 @@ kind that is the correct direction to be wrong in.
 | Hook, real JSON on stdin | 7/7 |
 | False positives on two real sessions (1,277 turns, 2026-09-23) | 0 (was 14) |
 | False positives on all local sessions (378 files, 3,952 turns, 2026-09-23) | 0 (was 8 after the first fix) |
+| Same, with subagent transcripts (592 files, 4,235 turns, 2026-09-23) | 0 false alarms, 1 true positive: a deliberate probe that the **installed** hook blocked in a live session |
 | Hostile conditions (`test_robustesse.py`) | 17/17 |
 | Hook cost on a 4000-output transcript | 0.10 s |
 | Hook cost on a 111 MB transcript | 0.17 s (reads the last 8 MB; same verdict as a full read on all 384 local sessions, 2026-09-23) |

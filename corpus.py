@@ -19,6 +19,15 @@ from claimcheck import (HOOK_TAIL, REFUTE, audit_turns, extract, judge,
                         unrun_fix)
 
 DOSSIERS = os.path.expanduser(os.path.join("~", ".claude", "projects", "*", "*.jsonl"))
+# Les sous-agents écrivent à part (208 fichiers le 23/09), et rendent justement des
+# comptes-rendus : matière neuve pour l invariant, jamais vue par les correctifs.
+SOUS_AGENTS = os.path.expanduser(os.path.join("~", ".claude", "projects", "*", "*", "subagents", "*.jsonl"))
+
+
+# Vrais positifs VOULUS, relus par un humain : affichés, mais ne font pas échouer.
+# 483eacde = sonde du 23/09 (tour 6 de la boucle) : Write d'un .py puis « est corrigé »
+# sans rien lancer, pour prouver la règle B sur le hook INSTALLÉ. Il a bloqué.
+CONNUS = {("483eacde", "fix_sans_execution")}
 
 
 def juger(turns, i, hist):
@@ -37,7 +46,7 @@ def main():
         except (AttributeError, ValueError):
             pass
     bavard = "-v" in sys.argv
-    fichiers = glob.glob(DOSSIERS)
+    fichiers = glob.glob(DOSSIERS) + glob.glob(SOUS_AGENTS)
     etats = collections.Counter()
     refutes, nb_tours, gros, ecarts = [], 0, 0, []
     for f in fichiers:
@@ -73,10 +82,13 @@ def main():
     print(f"{len(fichiers)} sessions, {nb_tours} tours")
     for (kind, st), n in sorted(etats.items()):
         print(f"  {kind:<20} {st:<15} {n}")
-    print(f"REFUTE : {len(refutes)}")
+    connus = [r for r in refutes if (r[0], r[2].kind) in CONNUS]
+    refutes = [r for r in refutes if (r[0], r[2].kind) not in CONNUS]
+    print(f"REFUTE : {len(refutes)}   (+ {len(connus)} vrai(s) positif(s) connu(s))")
     if bavard:
-        for b, t, c, ctx in refutes:
-            print(f"  {b} t{t} [{c.kind}] « {c.raw} » -> {c.evidence[:100]}\n      {ctx}")
+        for b, t, c, ctx in connus + refutes:
+            tag = "CONNU " if (b, c.kind) in CONNUS else ""
+            print(f"  {tag}{b} t{t} [{c.kind}] « {c.raw} » -> {c.evidence[:100]}\n      {ctx}")
     print(f"lecture de fin ({HOOK_TAIL // 1048576} Mo) : {len(ecarts)} verdict(s) différent(s) "
           f"de la lecture complète, {gros} session(s) plus grosses que la fenêtre")
     for b in ecarts:
