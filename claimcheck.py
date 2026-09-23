@@ -542,7 +542,11 @@ def main():
         # Toute entrée dégradée — stdin vide, JSON cassé, racine qui n'est pas un objet —
         # se traduit donc par un silence, jamais par une erreur ni par un blocage.
         try:
-            payload = json.load(sys.stdin)
+            # OCTETS, décodés en UTF-8. Sous Windows, sys.stdin décode en cp1252 : le JSON
+            # UTF-8 brut de Claude Code arrivait « corrigÃ© », et TOUTE forme accentuée
+            # (corrigé, échec, réussite, poussés) était muette en mode hook. Le banc ne le
+            # voyait pas : json.dumps y échappait les accents en é (23/09).
+            payload = json.loads(sys.stdin.buffer.read().decode("utf-8", errors="replace"))
         except (ValueError, OSError):
             sys.exit(0)
         if not isinstance(payload, dict):
@@ -581,11 +585,19 @@ def main():
             claims.append(fix)
         refutes = [c for c in claims if c.state == REFUTE]
         if refutes:
-            head = (f"{len(refutes)} affirmation(s) contredite(s) par les sorties de ce tour. "
-                    f"Corrige le texte ou produis la preuve.")
-            print(json.dumps({"decision": "block",
-                              "reason": head + "\n" + report(claims)},
-                             ensure_ascii=False))
+            # UN SEUL MESSAGE COMPTE : Claude Code ignore un 2ᵉ blocage dans le même tour
+            # (stop_hook_active). Il doit donc dire quoi faire, et rien d'autre : la liste
+            # des « non vérifiables » noyait la seule ligne utile (bloc reçu le 23/09).
+            lignes = [f"- « {c.raw} » : {c.evidence}" for c in refutes]
+            if any(c.kind == "fix_sans_execution" for c in refutes):
+                lignes.append("Lance les tests (ou la commande qui prouve la correction), "
+                              "puis réécris le compte-rendu d'après leur sortie.")
+            if any(c.kind != "fix_sans_execution" for c in refutes):
+                lignes.append("Corrige le chiffre d'après la sortie citée, ou relance la "
+                              "commande et cite sa sortie.")
+            print(json.dumps({"decision": "block", "reason":
+                              f"claimcheck : {len(refutes)} affirmation(s) contredite(s).\n"
+                              + "\n".join(lignes)}, ensure_ascii=False))
         sys.exit(0)
 
     path = sys.argv[1]

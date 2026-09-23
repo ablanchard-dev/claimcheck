@@ -107,8 +107,10 @@ def banc_hook():
            ("0 fail confirme", "Tout est vert, 0 fail.", vert, False)]
     n = 0
     for nom, msg, tp, doit_bloquer in cas:
+        # ensure_ascii=False : Claude Code envoie de l'UTF-8 BRUT. Avec l'échappement
+        # é par défaut, ce banc passait alors que tout accent était muet en réel.
         p = json.dumps({"hook_event_name": "Stop", "last_assistant_message": msg,
-                        "transcript_path": tp})
+                        "transcript_path": tp}, ensure_ascii=False)
         r = subprocess.run([sys.executable, "claimcheck.py", "--hook"], cwd=ICI, input=p,
                            capture_output=True, text=True, encoding="utf-8", errors="replace")
         bloque = '"block"' in (r.stdout or "")
