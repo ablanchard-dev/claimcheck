@@ -79,9 +79,10 @@ kind that is the correct direction to be wrong in.
 
 | Bench | Result |
 |---|---|
-| Mutation proof (`test_mutation.py`) | 33/33 |
-| Hook, real JSON on stdin | 5/5 |
+| Mutation proof (`test_mutation.py`) | 41/41 |
+| Hook, real JSON on stdin | 6/6 |
 | False positives on two real sessions (1,277 turns) | 0 (was 14) |
+| False positives on all local sessions (378 files, 3,952 turns) | 0 (was 8 after the first fix) |
 | Hostile conditions (`test_robustesse.py`) | 17/17 |
 | Hook cost on a 4000-output transcript | 0.10 s |
 | Hook cost on a 111 MB transcript | 0.66 s |
@@ -118,7 +119,13 @@ turn end is uninstalled the same day, and then nothing is checked at all.
 
 ## Known limits
 
-- Recognises four claim shapes: test counts, `0 fail`, pushed-repo counts, commit SHAs.
+- Recognises five claim shapes: test counts, `0 fail`, pushed-repo counts, commit SHAs, and
+  "fixed" after a code edit.
+- A single runner in the turn contradicts a test count only within a factor of 2. Beyond
+  that it may be a different suite (measured: a DrDXT total of 4,537 against a Lumenia run of
+  629), so a gross fabrication against a suite of another size is reported as unverifiable.
+- `0 fail` is refuted only when the turn has exactly one runner. With several, some failing
+  on purpose (mutation testing), the referent is undetermined.
 - French and English phrasing, tested on French transcripts.
 - Claim extraction is pattern-based, so an unusual phrasing is simply not seen — and that
   silence is counted in the coverage line rather than hidden.

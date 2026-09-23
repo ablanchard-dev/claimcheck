@@ -56,8 +56,11 @@ def main():
 
     print("\nMutations -- doivent REFUTER (sinon la garantie est nommee, pas prouvee)")
     r += [
-        check("le compte de tests est fausse", "999 tests verts", [PYTEST], REFUTE),
-        check("le BILAN est fausse", "500 PASS", [BILAN], REFUTE),
+        check("le compte de tests est fausse", "170 tests verts", [PYTEST], REFUTE),
+        check("le BILAN est fausse", "240 PASS", [BILAN], REFUTE),
+        # PLAFOND ASSUMÉ (23/09) : hors d'un rapport 2, le seul lanceur du tour est peut-être
+        # une autre suite. Si ce cas repasse à REFUTE, les 2 fausses alarmes DrDXT reviennent.
+        check("plafond : ecart x6 = autre suite possible", "999 tests verts", [PYTEST], INCONNU),
         check("plus de depots annonces que pousses", "9 depots pousses", [PUSH], REFUTE),
         check("moins de depots annonces que pousses", "1 depot pousse", [PUSH], REFUTE),
         check("zero echec alors que le lanceur echoue",
@@ -84,6 +87,25 @@ def main():
               "3001 verts", ["120 passed", "8 passed"], INCONNU),
         check("total additionne = somme des lanceurs",
               "128 verts", ["120 passed", "Reussi! - echec : 0, reussite : 8"], VERIFIE),
+        # Corpus complet (3 950 tours, 23/09) : 8 refutations, toutes fausses.
+        check("milliers aussi pour 'tests verts'",
+              "Code commité, 4 537 tests verts.", ["=== 4537 passed in 80s ==="], VERIFIE),
+        check("milliers : un faux reste refute",
+              "Code commité, 4 999 tests verts.", ["=== 4537 passed in 80s ==="], REFUTE),
+        check("passed=52 failed=0 n'est pas '52 failed'",
+              "La somme donne 0 failed.", ["TOTAL passed=52 failed=0 ignored=2"], VERIFIE),
+        check("passed 425 failed 0",
+              "425 tests réussis et 0 échec.", ["suite : passed 425 failed 0 suites 53"],
+              VERIFIE),
+        check("mutations en echec + vraie suite : referent indetermine",
+              "237 tests / 0 échec.",
+              ["test result: FAILED. 6 passed; 1 failed;",
+               "test result: FAILED. 1 passed; 1 failed;", "total passes: 237"], INCONNU),
+        check("un seul lanceur en echec : refute",
+              "Tout est vert, 0 échec.", ["test result: FAILED. 6 passed; 1 failed;"], REFUTE),
+        check("valeur declaree perimee",
+              "venait de la fiche mémoire périmée (410 verts, figée au 18/09)",
+              ["629 passed, 110 warnings"], INCONNU),
         check("un rappel systeme n'est pas une preuve",
               "J'ai lance : 305 passed",
               ["<system-reminder>309 PASS / 0 FAIL</system-reminder>"], INCONNU),

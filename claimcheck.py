@@ -48,7 +48,10 @@ class Claim:
 PATTERNS = [
     # « 162 tests verts », « 235 PASS », « 141 passed »
     ("test_count", re.compile(
-        r"\b(\d{1,5})\s*(?:tests?\s*(?:verts?|passed|au vert|passent)|PASS\b|passed\b)",
+        # Même séparateur de milliers que bare_green : « 4 537 tests verts » était lu 537
+        # et réfuté trois fois sur le corpus complet (23/09).
+        r"\b(\d{1,3}(?:[   ]\d{3})+|\d{1,5})\s*"
+        r"(?:tests?\s*(?:verts?|passed|au vert|passent)|PASS\b|passed\b)",
         re.I)),
     # « 81 verts », « 141 verts » — la forme la PLUS fréquente à l'usage, et celle que la
     # v1 ratait entièrement parce qu'elle exigeait le mot « tests ». Mesuré sur corpus réel :
@@ -101,7 +104,7 @@ RUNNER_SUMMARY = re.compile(
 # lanceur a lui-même imprimé. pytest « 162 passed », BILAN « 235 PASS », dotnet
 # « Passed: 8 » / « réussite : 8 ».
 PASS_COUNT = re.compile(
-    r"(?<![\d.])(\d+)\s*(?:passed\b|PASS\b)|\b(?:passed|r[ée]ussite)\s*:\s*(\d+)", re.I)
+    r"(?<![\d.])(\d+)\s*(?:passed\b|PASS\b)|\b(?:passed|passes|r[ée]ussite)\s*[:=]\s*(\d+)", re.I)
 # Un rappel système n'est pas une sortie d'outil. Le 23/09, le hook a « réfuté » un
 # exemple en citant « This memory is 4 days old » comme preuve.
 _REMINDER = re.compile(r"<system-reminder>.*?</system-reminder>", re.S)
@@ -163,6 +166,9 @@ REPORT_MARK = re.compile(
     r"poussés?|pushed|commités?|vérifiés?|mesurés?|lancés?)\b", re.I)
 
 
+HISTORIC = re.compile(r".*?\b(?:périmée?s?|figée?s?|obsolètes?|anciens?|anciennes?)\b", re.I)
+
+
 def modality(text: str, start: int, raw: str) -> str:
     """« report » = compte-rendu jugeable · « intent » = intention · « cite » = citation.
 
@@ -188,6 +194,10 @@ def modality(text: str, start: int, raw: str) -> str:
     if ligne_g.rfind(OUVRE) > ligne_g.rfind(FERME) and FERME in ligne_d:
         return "cite"
     before = text[max(0, start - 90):start]
+    # Une valeur déclarée PÉRIMÉE est rapportée, pas affirmée : « la fiche mémoire
+    # périmée (410 verts, figée au 18/09) » a été réfutée contre le vrai 629 (23/09).
+    if HISTORIC.search(before[-40:]) or HISTORIC.match(text[fin:fin + 25].lstrip(", (")):
+        return "cite"
     if REPORT_MARK.search(raw):
         return "report"
     if INTENT_VERB.search(raw) or INTENT_BEFORE.search(before):
@@ -217,6 +227,22 @@ def extract(text: str) -> List[Claim]:
             claims.append(Claim(kind=kind, raw=raw, value=val,
                                 mood=modality(text, m.start(), raw)))
     return claims
+
+
+_FAIL_AFTER = re.compile(r"(?:failed|fail|échecs?)\s*[=:]?\s*(\d+)", re.I)
+_FAIL_BEFORE = re.compile(r"(?<![=:\d])\b(\d+)\s*(?:failed|fail\b|échecs?)", re.I)
+
+
+def _fail_counts(out: str) -> List[int]:
+    """Comptes d'échecs imprimés, ligne par ligne. Dans « passed=52 failed=0 » ou
+    « passed 425 failed 0 », le nombre appartient au mot qui le PRÉCÈDE : lire « 52
+    failed » a réfuté deux « 0 failed » vrais (corpus complet, 23/09). Si une ligne a la
+    forme « failed N », on ne lit qu'elle ; sinon la forme pytest/cargo « N failed »."""
+    n = []
+    for ln in out.splitlines():
+        rx = _FAIL_AFTER if _FAIL_AFTER.search(ln) else _FAIL_BEFORE
+        n += [int(x) for x in rx.findall(ln)]
+    return n
 
 
 def judge(claims: List[Claim], evidence: List[str],
@@ -253,10 +279,18 @@ def judge(claims: List[Claim], evidence: List[str],
             elif len(counts) > 1 and sum(counts) == int(v):
                 c.state, c.evidence = VERIFIE, (
                     f"somme des {len(counts)} comptes de lanceur = {c.value}")
-            elif len(set(counts)) == 1:
-                # UN seul compte, et ce n'est pas le nôtre : contradiction réelle.
+            elif len(set(counts)) == 1 and 0.5 <= int(v) / max(counts[0], 1) <= 2:
+                # UN seul compte, du même ordre de grandeur : contradiction réelle.
+                # ponytail: le rapport < 2 tient lieu de référent. Mesuré le 23/09 : les deux
+                # dernières fausses alarmes du corpus complet opposaient un total DrDXT
+                # (4 537) au seul lanceur du tour, qui testait un AUTRE projet (629).
+                # Plafond : une invention grossière face à une suite d'une autre taille
+                # passe en « non vérifiable ». Une dérive (309 contre 305) reste attrapée.
                 c.state, c.evidence = REFUTE, (
                     f"annonce {c.value}, le lanceur du tour dit {counts[0]}")
+            elif len(set(counts)) == 1:
+                c.state, c.evidence = INCONNU, (
+                    f"annonce {v}, seul lanceur du tour à {counts[0]} : autre suite ?")
             elif counts:
                 # RÉFÉRENT. Plusieurs comptes différents : rien ne dit lequel est visé,
                 # ni si l'annonce est un total additionné de tête. On ne tranche pas.
@@ -301,23 +335,22 @@ def judge(claims: List[Claim], evidence: List[str],
             # a accusé un « 0 FAIL » parfaitement vrai. Rendre un verdict à partir de
             # canaux qu'on n'a pas vraiment examinés est le défaut que cet outil combat.
             runs = [e for e in evidence if RUNNER.search(e)]
-            bad = [e for e in runs
-                   if re.search(r"\b[1-9]\d*\s*(?:failed|fail\b|échecs?)", e, re.I)]
+            bad = [e for e in runs if any(_fail_counts(e))]
             if not runs:
                 c.state, c.evidence = INCONNU, "aucun lanceur dans ce tour"
             elif not bad:
                 c.state, c.evidence = VERIFIE, f"{len(runs)} sortie(s) de lanceur, aucun échec"
-            elif len(bad) == len(runs):
+            elif len(runs) == 1:
                 c.state, c.evidence = REFUTE, (
-                    f"les {len(runs)} sortie(s) de lanceur rapportent toutes des échecs")
+                    f"le seul lanceur du tour rapporte {max(_fail_counts(bad[0]))} échec(s)")
             else:
-                # RÉFÉRENT. Plusieurs lanceurs, certains propres et d'autres non : « 0 fail »
-                # désigne l'un d'eux et rien ne dit lequel. Sans unanimité, on ne tranche
-                # pas — c'est ce qui avait accusé un « 235 PASS / 0 FAIL » parfaitement vrai
-                # parce qu'une suite SANS RAPPORT échouait dans le même tour.
+                # RÉFÉRENT. Plusieurs lanceurs dont certains échouent : « 0 fail » désigne
+                # l'un d'eux et rien ne dit lequel. L'unanimité ne suffit pas non plus :
+                # mesuré le 23/09, deux lanceurs en échec étaient des MUTATIONS volontaires,
+                # et la vraie suite (« total passes: 237 ») n'avait pas la forme d'un lanceur.
                 c.state, c.evidence = INCONNU, (
-                    f"{len(bad)} lanceur(s) en échec sur {len(runs)}, mais rien ne dit "
-                    "auquel l'affirmation se rapporte")
+                    f"{len(bad)} lanceur(s) en échec sur {len(runs)} (mutations ?), "
+                    "rien ne dit auquel l'affirmation se rapporte")
     return claims
 
 
