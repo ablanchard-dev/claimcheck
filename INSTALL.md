@@ -32,14 +32,14 @@ entrées, l'existant n'est pas remplacé) :
   "hooks": [
     {
       "type": "command",
-      "command": "py \"C:\\Users\\blanc\\Downloads\\claimcheck\\claimcheck.py\" --hook"
+      "command": "py \"C:\\chemin\\vers\\claimcheck\\claimcheck.py\" --hook"
     }
   ]
 }
 ```
 
 > ⚠️ **`py`, pas `python`.** Sur cette machine, `python` résout via le PATH vers le venv d'un
-> ancien projet (`bottrade\venv`). Le jour où ce dossier disparaît, le hook meurt **sans aucune
+> ancien projet. Le jour où ce dossier disparaît, le hook meurt **sans aucune
 > erreur visible** : plus rien n'est vérifié et rien ne le dit. `py` est le lanceur Windows,
 > il ne dépend d'aucun venv. Mesuré le 18/09 : même sortie avec les deux.
 
@@ -62,7 +62,7 @@ Ne compte pas sur « je verrai bien quand ça bloquera » : si le hook est mal p
 jamais rien et tu croiras qu'il veille. Force le cas :
 
 ```
-cd C:\Users\blanc\Downloads\claimcheck
+cd C:\chemin\vers\claimcheck
 py check_all.py
 ```
 
@@ -73,7 +73,7 @@ Pour tester la commande *exactement comme Claude Code la lance*, depuis ce dossi
 `exemple-tour.jsonl` est un tour réel minimal : pytest y a rendu `162 passed`.
 
 ```
-echo {"hook_event_name":"Stop","last_assistant_message":"J'ai lance : 170 tests verts.","transcript_path":"exemple-tour.jsonl"} | bash -c "py \"C:\\Users\\blanc\\Downloads\\claimcheck\\claimcheck.py\" --hook"
+echo {"hook_event_name":"Stop","last_assistant_message":"J'ai lance : 170 tests verts.","transcript_path":"exemple-tour.jsonl"} | bash -c "py \"C:\\chemin\\vers\\claimcheck\\claimcheck.py\" --hook"
 ```
 
 Un JSON `block` en sortie = le hook fonctionne. Avec `162 tests verts` (la vérité), rien ne

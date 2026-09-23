@@ -1,7 +1,7 @@
 # Choix de licence — motif écrit, rien de signé
 
-**Décision d'Alex.** Ce fichier documente le raisonnement pour qu'il n'ait pas à le refaire ;
-il ne vaut pas signature et aucun fichier `LICENSE` n'a été posé.
+**Tranché le 23/09/2026 : GPL-3.0** (fichier `LICENSE`, texte officiel), comme DrDXT.
+Le raisonnement ci-dessous recommandait MIT ; il est gardé tel quel pour mémoire.
 
 ## Ce qui est EXCLU, et pourquoi
 

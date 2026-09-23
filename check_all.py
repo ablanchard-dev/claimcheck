@@ -9,6 +9,7 @@ Si le README ment, ce fichier rougit.
 """
 from __future__ import annotations
 
+import glob
 import io
 import json
 import os
@@ -21,9 +22,8 @@ ICI = os.path.dirname(os.path.abspath(__file__))
 # Le corpus d'origine (f3f76cf7) a été supprimé : le banc rendait RATE sur un fichier
 # absent, pas sur l'outil. On prend la plus grosse session réelle présente, ou
 # CLAIMCHECK_CORPUS si on veut figer le corpus.
-_DOSSIER = r"C:\Users\blanc\.claude\projects\C--Users-blanc"
 TRANSCRIPT = os.environ.get("CLAIMCHECK_CORPUS") or max(
-    (os.path.join(_DOSSIER, f) for f in os.listdir(_DOSSIER) if f.endswith(".jsonl")),
+    glob.glob(os.path.expanduser(os.path.join("~", ".claude", "projects", "*", "*.jsonl"))),
     key=os.path.getsize, default="")
 
 try:

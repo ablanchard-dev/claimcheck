@@ -135,3 +135,7 @@ turn end is uninstalled the same day, and then nothing is checked at all.
 - French and English phrasing, tested on French transcripts.
 - Claim extraction is pattern-based, so an unusual phrasing is simply not seen — and that
   silence is counted in the coverage line rather than hidden.
+
+## License
+
+GPL-3.0. See `LICENSE`.
