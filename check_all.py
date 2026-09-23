@@ -98,6 +98,8 @@ def banc_hook():
             f.write(json.dumps({"type": role, "message": {"role": role, "content": blocs}})
                     + "\n")
     cas = [("compte-rendu faux", "J'ai lance la suite : 170 tests verts.", vert, True),
+           ("BOM devant le JSON (PowerShell)", "J'ai lance la suite : 170 tests verts.",
+            vert, True),
            ("transcript en retard d'un message", "C'est corrigé, 162 tests verts.", decale,
             False),
            ("corrige sans rien lancer", "Voila, c'est corrigé.", edit, True),
@@ -111,6 +113,8 @@ def banc_hook():
         # é par défaut, ce banc passait alors que tout accent était muet en réel.
         p = json.dumps({"hook_event_name": "Stop", "last_assistant_message": msg,
                         "transcript_path": tp}, ensure_ascii=False)
+        if nom.startswith("BOM"):
+            p = "﻿" + p   # ce que PowerShell envoie réellement sur stdin
         r = subprocess.run([sys.executable, "claimcheck.py", "--hook"], cwd=ICI, input=p,
                            capture_output=True, text=True, encoding="utf-8", errors="replace")
         bloque = '"block"' in (r.stdout or "")
@@ -134,7 +138,10 @@ def banc_robustesse():
 def banc_corpus():
     print("\n3. Corpus réel : aucun faux positif")
     if not os.path.exists(TRANSCRIPT):
-        bilan("transcript introuvable", False, TRANSCRIPT)
+        # Clone neuf, aucune session Claude Code sur la machine : il n'y a rien à rejouer.
+        # Échouer ici faisait rater le banc à quiconque télécharge le dépôt (mesuré le
+        # 23/09 sur un clone avec un profil vide). On le dit, on ne le compte pas.
+        print("  [SAUTÉ] aucune session Claude Code locale à rejouer")
         return None, None, None
     r = subprocess.run([sys.executable, "claimcheck.py", TRANSCRIPT], cwd=ICI,
                        capture_output=True, text=True, encoding="utf-8", errors="replace")

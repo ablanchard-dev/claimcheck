@@ -12,6 +12,37 @@ claimcheck runs as a Claude Code `Stop` hook. It reads the agent's final message
 claims it recognises, and confronts each one with the tool output produced in that same turn.
 It blocks only when a claim is contradicted.
 
+## Quick start
+
+Needs Python 3.8+ (`py` on Windows, `python3` elsewhere). No dependencies.
+
+**Install** (two commands, in a terminal):
+
+```
+claude plugin marketplace add ablanchard-dev/claimcheck
+claude plugin install claimcheck@claimcheck
+```
+
+Or from inside Claude Code: `/plugin marketplace add ablanchard-dev/claimcheck`, then
+`/plugin install claimcheck@claimcheck`. Restart the session. Nothing else to configure.
+
+**See it work** (from the cloned folder). `exemple-tour.jsonl` is a turn where pytest printed
+`162 passed`:
+
+```
+echo '{"last_assistant_message":"I ran it: 170 tests passed.","transcript_path":"exemple-tour.jsonl"}' | python3 claimcheck.py --hook
+```
+
+It prints `{"decision": "block", ...}`. With `162 tests passed` it prints nothing.
+
+**Remove:** `claude plugin uninstall claimcheck@claimcheck`
+
+**Run the tests:** `python3 check_all.py` (on Windows: `py check_all.py`).
+
+What you will see in a session: when the agent ends a turn on a claim its own output
+contradicts, it does not stop. It gets the claim, the output against it, and what to do
+("run the tests, then rewrite the report from their output"), and carries on.
+
 ## What it will not do
 
 **It never re-runs anything.** Re-running a test suite at every turn end costs tens of seconds
@@ -80,7 +111,7 @@ kind that is the correct direction to be wrong in.
 | Bench | Result |
 |---|---|
 | Mutation proof (`test_mutation.py`) | 41/41 |
-| Hook, real JSON on stdin | 7/7 |
+| Hook, real JSON on stdin | 8/8 |
 | False positives on two real sessions (1,277 turns, 2026-09-23) | 0 (was 14) |
 | False positives on all local sessions (378 files, 3,952 turns, 2026-09-23) | 0 (was 8 after the first fix) |
 | Same, with subagent transcripts (592 files, 4,235 turns, 2026-09-23) | 0 false alarms, 1 true positive: a deliberate probe that the **installed** hook blocked in a live session |
@@ -89,7 +120,7 @@ kind that is the correct direction to be wrong in.
 | Hook cost on a 111 MB transcript | 0.17 s (reads the last 8 MB; same verdict as a full read on all 384 local sessions, 2026-09-23) |
 | Coverage | printed at every run, on both denominators |
 
-The corpus rows are re-measured by `python corpus.py`, which replays the tool on every
+The corpus rows are re-measured by `python3 corpus.py`, which replays the tool on every
 local session, checks that the 8 MB tail read gives the same verdict as a full read, and
 exits 1 on any refutation. Run on the code as it stood before the fixes of 2026-09-23, it
 finds the 8 false alarms and exits 1, so a clean run means something.
@@ -109,8 +140,8 @@ ref-update lines. Neither was visible on re-reading.
 ## Usage
 
 ```
-python claimcheck.py <transcript.jsonl>   # audit a whole session
-python claimcheck.py --hook               # Stop hook, JSON on stdin
+python3 claimcheck.py <transcript.jsonl>   # audit a whole session (py on Windows)
+python3 claimcheck.py --hook               # Stop hook, JSON on stdin
 ```
 
 Hook mode reads `last_assistant_message` and `transcript_path`, and emits

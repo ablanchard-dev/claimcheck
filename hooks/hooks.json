@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py -3 \"${CLAUDE_PLUGIN_ROOT}/claimcheck.py\" --hook 2>/dev/null || python3 \"${CLAUDE_PLUGIN_ROOT}/claimcheck.py\" --hook"
+          }
+        ]
+      }
+    ]
+  }
+}

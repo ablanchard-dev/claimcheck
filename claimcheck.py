@@ -546,7 +546,9 @@ def main():
             # UTF-8 brut de Claude Code arrivait « corrigÃ© », et TOUTE forme accentuée
             # (corrigé, échec, réussite, poussés) était muette en mode hook. Le banc ne le
             # voyait pas : json.dumps y échappait les accents en é (23/09).
-            payload = json.loads(sys.stdin.buffer.read().decode("utf-8", errors="replace"))
+            # utf-8-sig : PowerShell préfixe un BOM à ce qu'il envoie sur stdin ; json.loads
+            # le refusait et le hook se taisait (test du README, 23/09).
+            payload = json.loads(sys.stdin.buffer.read().decode("utf-8-sig", errors="replace"))
         except (ValueError, OSError):
             sys.exit(0)
         if not isinstance(payload, dict):

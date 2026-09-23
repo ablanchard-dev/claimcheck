@@ -1,0 +1,14 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "claimcheck",
+  "description": "Checks an agent's claims against the evidence of the turn.",
+  "owner": { "name": "ablanchard-dev", "url": "https://github.com/ablanchard-dev" },
+  "plugins": [
+    {
+      "name": "claimcheck",
+      "description": "Stop hook: blocks a claim only when the turn's own output contradicts it.",
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}
