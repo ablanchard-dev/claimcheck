@@ -4,9 +4,9 @@ Checks what a coding agent **says it did** against what the turn actually shows 
 
 The failure this targets is not "the AI writes bad code". It is: the agent writes *"tests
 green"*, *"file created"*, *"pushed"* because that is the expected **shape** of a finished
-task — not because it looked. Published measurements put GPT-5 at submitting a patch 100% of
-the time while resolving 44% of tasks, and developers report spending roughly a quarter of
-their week checking AI output.
+task — not because it looked. "GPT-5 submits a patch on 100% of runs but resolves only 44%"
+(Mehta, *Confident and Wrong: Silent Semantic Failures in Coding Agents*, arXiv 2603.25764,
+March 2026).
 
 claimcheck runs as a Claude Code `Stop` hook. It reads the agent's final message, finds the
 claims it recognises, and confronts each one with the tool output produced in that same turn.
