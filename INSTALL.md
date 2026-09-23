@@ -17,7 +17,7 @@ Si tu veux couper sans éditer le JSON : **renomme le dossier `claimcheck`**. La
 Vérifier que c'est bien parti :
 
 ```
-python -c "import json,io;d=json.load(io.open(r'%USERPROFILE%\.claude\settings.json',encoding='utf-8'));print('claimcheck present :', 'claimcheck' in json.dumps(d))"
+py -c "import json,io;d=json.load(io.open(r'%USERPROFILE%\.claude\settings.json',encoding='utf-8'));print('claimcheck present :', 'claimcheck' in json.dumps(d))"
 ```
 
 ---
@@ -32,11 +32,16 @@ entrées, l'existant n'est pas remplacé) :
   "hooks": [
     {
       "type": "command",
-      "command": "python \"C:\\Users\\blanc\\Downloads\\claimcheck\\claimcheck.py\" --hook"
+      "command": "py \"C:\\Users\\blanc\\Downloads\\claimcheck\\claimcheck.py\" --hook"
     }
   ]
 }
 ```
+
+> ⚠️ **`py`, pas `python`.** Sur cette machine, `python` résout via le PATH vers le venv d'un
+> ancien projet (`bottrade\venv`). Le jour où ce dossier disparaît, le hook meurt **sans aucune
+> erreur visible** : plus rien n'est vérifié et rien ne le dit. `py` est le lanceur Windows,
+> il ne dépend d'aucun venv. Mesuré le 18/09 : même sortie avec les deux.
 
 **Testé, pas supposé** : cette commande a été lancée **via bash**, comme Claude Code le fait,
 et elle rend bien `{"decision": "block", ...}` sur un compte-rendu faux.
@@ -58,19 +63,23 @@ jamais rien et tu croiras qu'il veille. Force le cas :
 
 ```
 cd C:\Users\blanc\Downloads\claimcheck
-python check_all.py
+py check_all.py
 ```
 
-Attendu : `14/14 — TOUT PASSE`, code de retour 0. Ce banc rejoue le hook sur un faux
+Attendu : `TOUT PASSE`, code de retour 0. Ce banc rejoue le hook sur un faux
 compte-rendu et vérifie qu'il bloque.
 
-Pour tester la commande *exactement comme Claude Code la lance* :
+Pour tester la commande *exactement comme Claude Code la lance*, depuis ce dossier.
+`exemple-tour.jsonl` est un tour réel minimal : pytest y a rendu `162 passed`.
 
 ```
-echo {"hook_event_name":"Stop","last_assistant_message":"J'ai lance : 9999 tests verts.","transcript_path":"<un transcript>"} | bash -c "python \"C:\\Users\\blanc\\Downloads\\claimcheck\\claimcheck.py\" --hook"
+echo {"hook_event_name":"Stop","last_assistant_message":"J'ai lance : 170 tests verts.","transcript_path":"exemple-tour.jsonl"} | bash -c "py \"C:\\Users\\blanc\\Downloads\\claimcheck\\claimcheck.py\" --hook"
 ```
 
-Un JSON `block` en sortie = le hook fonctionne.
+Un JSON `block` en sortie = le hook fonctionne. Avec `162 tests verts` (la vérité), rien ne
+sort. ⚠️ Il faut un transcript qui porte une sortie de lanceur : sans preuve, le hook ne
+bloque jamais, c'est voulu (« preuve absente » n'est pas « faux »). L'ancienne version de ce
+test passait un chemin fictif et ne pouvait donc **jamais** bloquer.
 
 ---
 
@@ -88,12 +97,14 @@ Ce n'est pas une erreur, ce n'est pas un plantage. C'est le comportement voulu.
 - une affirmation sans preuve dans le tour — « je n'ai pas pu regarder » n'est pas
   « c'est faux » ;
 - une affirmation dont le référent est indéterminé (« 0 fail » quand plusieurs lanceurs ont
-  tourné et qu'un seul a échoué) ;
+  tourné et que certains ont échoué, par exemple des mutations volontaires ; un total de
+  tests face au seul lanceur d'une suite deux fois plus grande ou plus petite) ;
 - **rien du tout en cas de problème** : transcript absent, JSON cassé, stdin vide, chemin
   accentué. Toutes ces situations rendent un silence. Un hook qui plante à chaque fin de tour
   se fait désinstaller le jour même, et alors plus rien n'est vérifié.
 
-**Coût mesuré : 0,10 s**, y compris sur un transcript de 4 000 sorties d'outil. Le hook ne
+**Coût mesuré : 0,10 s** sur un transcript de 4 000 sorties d'outil, **0,17 s** sur une
+session de 111 Mo (le hook n'en lit que les 8 derniers Mo). Le hook ne
 relance aucune commande — il cherche la preuve déjà produite.
 
 ---

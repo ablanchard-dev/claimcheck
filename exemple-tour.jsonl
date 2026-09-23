@@ -1,0 +1,3 @@
+{"type": "user", "message": {"role": "user", "content": "lance les tests"}}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "1", "name": "Bash", "input": {"command": "pytest -q"}}]}}
+{"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "1", "content": "162 passed in 7.40s"}]}}
