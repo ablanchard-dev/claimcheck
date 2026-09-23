@@ -88,7 +88,12 @@ kind that is the correct direction to be wrong in.
 | Hook cost on a 111 MB transcript | 0.17 s (reads the last 8 MB; same verdict as a full read on all 384 local sessions, 2026-09-23) |
 | Coverage | printed at every run, on both denominators |
 
-`check_all.py` re-derives every figure in that table and fails if the README has
+The corpus rows are re-measured by `python corpus.py`, which replays the tool on every
+local session, checks that the 8 MB tail read gives the same verdict as a full read, and
+exits 1 on any refutation. Run on the code as it stood before the fixes of 2026-09-23, it
+finds the 8 false alarms and exits 1, so a clean run means something.
+
+`check_all.py` re-derives every other figure in that table and fails if the README has
 drifted. Two figures were deliberately dropped from it — the turn count and the
 coverage percentage: both depend on a transcript that keeps growing, and both went
 stale within the hour. The bench caught them. A number nobody can keep true is not
