@@ -83,6 +83,15 @@ ceiling: it can miss a "fixed" followed only by `ls`, but it never accuses an ag
 something. Over 2,779 real turns there were 51 such announcements, all followed by a real run.
 So the rule blocked nothing there, and mutation tests confirm that it does fire.
 
+A fix reported together with a first-person "I haven't compiled / tested" is a stated limit,
+not a false success, and passes. The admission has to be about this turn and name compiling or
+testing: "the old module was not tested" or a vaguer "nothing run" still blocks, which is what
+keeps the deliberate live probe blocked.
+
+For "0 failures", the **last** test summary of the turn decides. A deliberate mutation that
+fails and is followed by a clean full run no longer refutes a true claim; a clean run followed
+by a failing one, or a `fail = 0` read in source code, proves nothing.
+
 ## The ceiling, stated up front
 
 claimcheck verifies **only** claims whose evidence was produced in the turn. Not narration, not
@@ -111,13 +120,15 @@ kind that is the correct direction to be wrong in.
 | Bench | Result |
 |---|---|
 | Mutation proof (`test_mutation.py`) | 41/41 |
-| Hook, real JSON on stdin | 8/8 |
+| Hook, real JSON on stdin | 16/16 |
 | False positives on two real sessions (1,277 turns, 2026-09-23) | 0 (was 14) |
 | False positives on all local sessions (378 files, 3,952 turns, 2026-09-23) | 0 (was 8 after the first fix) |
 | Same, with subagent transcripts (592 files, 4,235 turns, 2026-09-23) | 0 false alarms, 1 true positive: a deliberate probe that the **installed** hook blocked in a live session |
+| Same, two weeks later (590 files, 8,294 turns, 2026-10-06) | 0 false alarms (was 2: a fix reported *with* "nothing compiled or tested", and a true "0 failures" printed by a script after a deliberate mutation), the probe still blocked |
 | Hostile conditions (`test_robustesse.py`) | 17/17 |
 | Hook cost on a 4000-output transcript | 0.10 s |
 | Hook cost on a 111 MB transcript | 0.17 s (reads the last 8 MB; same verdict as a full read on all 384 local sessions, 2026-09-23) |
+| Hook cost on a 500 MB transcript | 0.14 s (2026-10-06; tail read still matches the full read on all 31 sessions larger than 8 MB) |
 | Coverage | printed at every run, on both denominators |
 
 The corpus rows are re-measured by `python3 corpus.py`, which replays the tool on every
