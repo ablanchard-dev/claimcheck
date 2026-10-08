@@ -184,9 +184,9 @@ def banc_corpus():
     r = subprocess.run([sys.executable, "claimcheck.py", TRANSCRIPT], cwd=ICI,
                        capture_output=True, text=True, encoding="utf-8", errors="replace")
     out = r.stdout or ""
-    ref = re.search(r"REFUTE\s*:\s*(\d+)", out)
-    tours = re.search(r"BILAN sur (\d+) tours", out)
-    couv = re.search(r"reconnues\s*:\s*(\d+)\s+\((\d+)% du vérifiable, (\d+)% du total\)", out)
+    ref = re.search(r"REFUTED\s*:\s*(\d+)", out)
+    tours = re.search(r"SUMMARY over (\d+) turns", out)
+    couv = re.search(r"recognised\s*:\s*(\d+)\s+\((\d+)% of checkable, (\d+)% of total\)", out)
     nb_ref = int(ref.group(1)) if ref else -1
     bilan("0 réfutation sur le corpus réel", nb_ref == 0, f"{nb_ref} réfuté(s)")
     if not couv:

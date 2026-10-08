@@ -111,6 +111,7 @@ def main():
               ["<system-reminder>309 PASS / 0 FAIL</system-reminder>"], INCONNU),
     ]
 
+    r += test_anglais()
     r += test_citation()
     r += test_fix_sans_execution()
 
@@ -118,6 +119,51 @@ def main():
     print(f"\n{len(r) - ko}/{len(r)} — {'TOUT PASSE' if not ko else str(ko) + ' RATE(S)'}")
     sys.exit(1 if ko else 0)
 
+
+
+def test_anglais():
+    """Les formes anglaises courantes. Le corpus local est francais : il ne peut pas
+    mesurer les fausses alarmes en anglais, donc chaque forme ajoutee a ici son temoin
+    (le vrai passe) ET sa mutation (le faux bloque)."""
+    print("\nAnglais -- temoins et mutations")
+    return [
+        check("tests are green, vrai", "162 tests are green", [PYTEST], VERIFIE),
+        check("tests are green, faux", "170 tests are green", [PYTEST], REFUTE),
+        check("all N tests pass, vrai", "All 162 tests pass.", [PYTEST], VERIFIE),
+        check("all N tests pass, faux", "All 170 tests pass.", [PYTEST], REFUTE),
+        check("N passing, faux", "Done: 170 tests passing.", [PYTEST], REFUTE),
+        check("N/N passing, vrai", "162/162 passing", [PYTEST], VERIFIE),
+        check("N/N passing, faux", "170/170 passing", [PYTEST], REFUTE),
+        check("0 failures, vrai", "0 failures.", [PYTEST], VERIFIE),
+        check("0 failures, faux", "0 failures.", ["3 failed, 10 passed"], REFUTE),
+        check("no failures, faux", "All good, no failures.", ["3 failed, 10 passed"], REFUTE),
+        check("intention : going to", "I'm going to get 170 tests passing", [PYTEST], INCONNU),
+        check("intention : next", "Next step: 170 tests passing.", [PYTEST], INCONNU),
+        check("valeur ancienne", "the old README said 170 tests passed", [PYTEST], INCONNU),
+        check("3 repos pushed, faux", "3 repos pushed.", [PUSH], REFUTE),
+        # Corpus du 08/10 : le nombre appartient au mot qui le precede, pas a « echecs ».
+        check("somme N echecs non nuls 0 n'est pas N echecs",
+              "4 848 tests with 0 failures.",
+              ["4848 passed\nresumes 17 somme 4848 echecs non nuls 0"], VERIFIE),
+        # Corpus du 08/10 : un comptage `uniq -c` de lignes « Failed Nom.Du.Test ».
+        check("uniq -c de lignes Failed n'est pas un bilan",
+              "6 206 tests with 0 failures.",
+              ["     18  error CS8602: Dereference\n      2  Failed App.Tests.Jauge.Pleine\n"
+               "      1  Failed App.Tests.Repair.Arret"], VERIFIE),
+        # Lanceurs JS (08/10) : la ligne des FICHIERS de test n'est pas un compte de tests.
+        check("jest, vrai", "162 tests passed",
+              ["Tests:       162 passed, 162 total\nTest Suites: 12 passed, 12 total"], VERIFIE),
+        check("jest, faux", "170 tests passed",
+              ["Tests:       162 passed, 162 total\nTest Suites: 12 passed, 12 total"], REFUTE),
+        check("vitest, faux", "170 tests passed",
+              [" Test Files  12 passed (12)\n      Tests  162 passed (162)"], REFUTE),
+        check("mocha, faux", "170 tests passing", ["  162 passing (2s)"], REFUTE),
+        check("mocha en echec, 0 failures faux", "0 failures.",
+              ["  159 passing (2s)\n  3 failing"], REFUTE),
+        # ...mais un vrai bilan pytest suivi de « in » reste lu.
+        check("pytest '1 failed in 0.5s' reste un echec",
+              "0 failures.", ["== 1 failed, 10 passed in 0.5s =="], REFUTE),
+    ]
 
 
 def test_citation():
@@ -172,6 +218,12 @@ def test_fix_sans_execution():
         fx("aucune annonce", "J'ai modifie main.py.", [EDIT], False),
         fx("citation", "il bloque " + chr(171) + "c'est corrigé" + chr(187) + " sans run",
            [EDIT], False),
+        fx("anglais : fixed, rien lance", "Fixed the null check.", [EDIT], True),
+        fx("anglais : it works now, rien lance", "It works now.", [EDIT], True),
+        fx("anglais : fixed puis lance", "Fixed the null check.", [EDIT, RUN], False),
+        fx("anglais : negation", "This is not fixed yet, the empty case remains.", [EDIT], False),
+        fx("anglais : negation contractee", "It isn't fixed.", [EDIT], False),
+        fx("anglais : aveu", "Fixed, but I haven't run the tests yet.", [EDIT], False),
     ]
 
 

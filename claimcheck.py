@@ -51,7 +51,10 @@ PATTERNS = [
         # Même séparateur de milliers que bare_green : « 4 537 tests verts » était lu 537
         # et réfuté trois fois sur le corpus complet (23/09).
         r"\b(\d{1,3}(?:[   ]\d{3})+|\d{1,5})\s*"
-        r"(?:tests?\s*(?:verts?|passed|au vert|passent)|PASS\b|passed\b)",
+        # Anglais : « 162 tests are green », « all 162 tests pass », « 162/162 passing ».
+        r"(?:/\d{1,5})?\s*"
+        r"(?:tests?\s*(?:verts?|passed|au vert|passent|are\s+(?:green|passing)|green\b|"
+        r"pass(?:es|ing)?\b)|PASS\b|passed\b|passing\b)",
         re.I)),
     # « 81 verts », « 141 verts » — la forme la PLUS fréquente à l'usage, et celle que la
     # v1 ratait entièrement parce qu'elle exigeait le mot « tests ». Mesuré sur corpus réel :
@@ -63,8 +66,10 @@ PATTERNS = [
     # PowerShell et les .md d'Alex emettent les trois.
     ("bare_green", re.compile(
         r"\b(\d{1,3}(?:[   ]\d{3})+|\d{1,5})\s+verts?\b", re.I)),
-    # « 0 fail », « 0 échec », « aucune erreur »
-    ("zero_fail", re.compile(r"\b0\s*(?:fail|failed|[ée]checs?|erreurs?)\b", re.I)),
+    # « 0 fail », « 0 échec », « 0 failures », « no failures »
+    ("zero_fail", re.compile(
+        r"\b0\s*(?:fail|failed|failures?|[ée]checs?|erreurs?)\b|\b(?:no|zero)\s+failures?\b",
+        re.I)),
     # « 8 dépôts poussés », « 9 commits poussés »
     # Deux ordres de mots : « 8 dépôts poussés » ET « pousser les 9 dépôts ». La première
     # version ne connaissait que le premier, et ratait précisément l'affirmation fausse
@@ -80,7 +85,8 @@ PATTERNS = [
 # Un résultat d'outil compte comme preuve d'un compte de tests s'il contient le nombre
 # ET un marqueur de sortie de lanceur. Le nombre seul ne suffit pas : il peut venir
 # d'un `cat` du message de l'agent lui-même.
-RUNNER = re.compile(r"passed|PASS\b|failed|BILAN|Réussi|no tests ran|collected", re.I)
+RUNNER = re.compile(r"passed|PASS\b|failed|BILAN|Réussi|no tests ran|collected|"
+                    r"\d+\s+(?:passing|failing)\b", re.I)   # mocha : « 162 passing »
 # RUNNER reste INCHANGÉ : c'est l'instrument, et on ne change pas l'instrument en cours
 # de route (même raison que le motif fixe de _NOM plus bas).
 #
@@ -104,7 +110,11 @@ RUNNER_SUMMARY = re.compile(
 # lanceur a lui-même imprimé. pytest « 162 passed », BILAN « 235 PASS », dotnet
 # « Passed: 8 » / « réussite : 8 ».
 PASS_COUNT = re.compile(
-    r"(?<![\d.])(\d+)\s*(?:passed\b|PASS\b)|\b(?:passed|passes|r[ée]ussite)\s*[:=]\s*(\d+)", re.I)
+    r"(?<![\d.])(\d+)\s*(?:passed\b|PASS\b|passing\b)"
+    r"|\b(?:passed|passes|r[ée]ussite)\s*[:=]\s*(\d+)", re.I)
+# jest « Test Suites: 12 passed », vitest « Test Files  12 passed » comptent des FICHIERS.
+# Lus comme des tests, ils faisaient deux comptes concurrents et un faux passait (08/10).
+_SUITE_LINE = re.compile(r"^\s*(?:Test Suites|Test Files)\b.*$", re.M | re.I)
 # Un rappel système n'est pas une sortie d'outil. Le 23/09, le hook a « réfuté » un
 # exemple en citant « This memory is 4 days old » comme preuve.
 _REMINDER = re.compile(r"<system-reminder>.*?</system-reminder>", re.S)
@@ -157,7 +167,9 @@ def _tool_results(msg) -> List[str]:
 # Un outil qui accuse un verbe au futur se fait désinstaller le premier jour.
 INTENT_BEFORE = re.compile(
     r"(?:je vais|on va|il faut|faudra|va falloir|reste[nt]? à|il reste|prochain\w*|"
-    r"objectif|gate|à faire|dis-moi|si tu veux|avant de|afin de|pour |demain|plus tard)"
+    r"objectif|gate|à faire|dis-moi|si tu veux|avant de|afin de|pour |demain|plus tard|"
+    r"I'll|I will|going to|need to|needs to|should|let me|next|to ?do|once|until|"
+    r"\bif |whether|make sure|ensure|so that|in order to|goal|target|before)"
     r"[^.!?\n]{0,60}$", re.I)
 INTENT_VERB = re.compile(r"\b(?:pousser|pousse[rz]|push(?:er)?|commiter|lancer|vérifier|"
                          r"faire|écrire)\b", re.I)
@@ -166,7 +178,8 @@ REPORT_MARK = re.compile(
     r"poussés?|pushed|commités?|vérifiés?|mesurés?|lancés?)\b", re.I)
 
 
-HISTORIC = re.compile(r".*?\b(?:périmée?s?|figée?s?|obsolètes?|anciens?|anciennes?)\b", re.I)
+HISTORIC = re.compile(r".*?\b(?:périmée?s?|figée?s?|obsolètes?|anciens?|anciennes?|"
+                      r"old|previous(?:ly)?|earlier|stale|outdated|used to)\b", re.I)
 
 
 def modality(text: str, start: int, raw: str) -> str:
@@ -231,7 +244,13 @@ def extract(text: str) -> List[Claim]:
 
 # [ée] : un bilan recalculé par un script imprime souvent « 0 echecs » sans accent (30/09).
 _FAIL_AFTER = re.compile(r"(?:failed|fail|[ée]checs?)\s*[=:]?\s*(\d+)", re.I)
-_FAIL_BEFORE = re.compile(r"(?<![=:\d])\b(\d+)\s*(?:failed|fail\b|[ée]checs?)", re.I)
+# Même règle que « passed=52 failed=0 » : dans « somme 4848 echecs non nuls 0 », 4848
+# appartient à « somme ». Lu comme 4848 échecs, il a réfuté un « 0 failures » vrai (08/10).
+# Et « 2  Failed Projet.Tests.UnTest » (sortie de `sort | uniq -c`) compte des LIGNES de
+# journal, pas des échecs : un bilan n'est jamais suivi d'un nom de test qualifié (08/10).
+_FAIL_BEFORE = re.compile(r"(?<![=:\d])(?<!somme )(?<!total )(?<!sum )\b(\d+)\s*"
+                          r"(?:failed|failing|fail\b|[ée]checs?)(?!\s+[A-Za-z_]\w*\.[A-Za-z_])",
+                          re.I)
 # Un bilan sans mot de lanceur doit au moins COMPTER des tests. RUNNER_SUMMARY ne suffit
 # pas : il lit « fail = 0 » dans du code comme un bilan (revue du 06/10).
 _TESTS_N = re.compile(r"\b\d+\s*tests?\b", re.I)
@@ -260,30 +279,31 @@ def judge(claims: List[Claim], evidence: List[str],
     for c in claims:
         if c.mood == "cite":
             c.state = INCONNU
-            c.evidence = "citation entre guillemets, pas une affirmation de l'agent"
+            c.evidence = "quoted example, not a claim by the agent"
             continue
 
         if c.mood == "intent":
             c.state = INCONNU
-            c.evidence = "intention, pas un compte-rendu : rien de passé à vérifier"
+            c.evidence = "intention, not a report: nothing past to check"
             continue
 
         if c.kind in ("test_count", "bare_green"):
             v = c.value or ""
             num = re.compile(r"(?<![\d.])" + re.escape(v) + r"(?![\d.])")
             hits = [e for e in evidence if num.search(e)]
-            counts = [int(a or b) for e in evidence for a, b in PASS_COUNT.findall(e)]
+            counts = [int(a or b) for e in evidence
+                      for a, b in PASS_COUNT.findall(_SUITE_LINE.sub("", e))]
             old = [e for e in history if num.search(e) and PASS_COUNT.search(e)]
             if hits:
                 # Le nombre est dans une sortie du tour, lanceur ou non (« la dernière
                 # exécution en a compté 4487 » venait d'un vérificateur de README).
                 c.state, c.evidence = VERIFIE, _snip(hits[0], c.value)
             elif old:
-                c.state, c.evidence = VERIFIE, "plus tôt dans la session : " + _snip(
+                c.state, c.evidence = VERIFIE, "earlier in the session: " + _snip(
                     old[-1], c.value)
             elif len(counts) > 1 and sum(counts) == int(v):
                 c.state, c.evidence = VERIFIE, (
-                    f"somme des {len(counts)} comptes de lanceur = {c.value}")
+                    f"sum of {len(counts)} runner counts = {c.value}")
             elif len(set(counts)) == 1 and 0.5 <= int(v) / max(counts[0], 1) <= 2:
                 # UN seul compte, du même ordre de grandeur : contradiction réelle.
                 # ponytail: le rapport < 2 tient lieu de référent. Mesuré le 23/09 : les deux
@@ -292,18 +312,18 @@ def judge(claims: List[Claim], evidence: List[str],
                 # Plafond : une invention grossière face à une suite d'une autre taille
                 # passe en « non vérifiable ». Une dérive (309 contre 305) reste attrapée.
                 c.state, c.evidence = REFUTE, (
-                    f"annonce {c.value}, le lanceur du tour dit {counts[0]}")
+                    f"claims {c.value}, the runner in this turn printed {counts[0]}")
             elif len(set(counts)) == 1:
                 c.state, c.evidence = INCONNU, (
-                    f"annonce {v}, seul lanceur du tour à {counts[0]} : autre suite ?")
+                    f"claims {v}, the only runner in this turn printed {counts[0]}: another suite?")
             elif counts:
                 # RÉFÉRENT. Plusieurs comptes différents : rien ne dit lequel est visé,
                 # ni si l'annonce est un total additionné de tête. On ne tranche pas.
                 c.state, c.evidence = INCONNU, (
-                    f"{len(set(counts))} comptes de lanceur différents dans le tour, "
-                    "référent indéterminé")
+                    f"{len(set(counts))} different runner counts in this turn, "
+                    "referent undetermined")
             else:
-                c.state, c.evidence = INCONNU, "preuve absente de ce tour"
+                c.state, c.evidence = INCONNU, "no evidence in this turn"
 
         elif c.kind == "pushed_count":
             # RÉFÉRENT. « 8 dépôts poussés » se compte : un dépôt = un push. « 8 commits
@@ -312,8 +332,8 @@ def judge(claims: List[Claim], evidence: List[str],
             # déterminé — la faute exacte que cet outil existe pour attraper.
             if not re.search(r"dépôts?|depots?|repos?", c.raw, re.I):
                 c.state, c.evidence = INCONNU, (
-                    "compte des commits, pas des dépôts : un push en porte plusieurs, "
-                    "le référent n'est pas déterminé")
+                    "counts commits, not repos: one push carries several, "
+                    "referent undetermined")
                 continue
             # UNITÉ. Ni la sortie d'outil (une commande peut pousser huit dépôts), ni
             # l'occurrence de motif (deux alternatives matchent la MÊME ligne et la
@@ -322,17 +342,17 @@ def judge(claims: List[Claim], evidence: List[str],
             # Les deux erreurs d'unité ont été trouvées par mutation, pas par relecture.
             n = sum(1 for e in evidence for ln in e.splitlines() if PUSH_REAL.search(ln))
             if n == 0:
-                c.state, c.evidence = INCONNU, "aucune sortie de push dans ce tour"
+                c.state, c.evidence = INCONNU, "no push output in this turn"
             elif str(n) == c.value:
-                c.state, c.evidence = VERIFIE, f"{n} sortie(s) de push trouvée(s)"
+                c.state, c.evidence = VERIFIE, f"{n} push output(s) found"
             else:
                 c.state, c.evidence = REFUTE, (
-                    f"annonce {c.value}, mais {n} sortie(s) de push réellement trouvée(s)")
+                    f"claims {c.value}, but {n} push output(s) actually found")
 
         elif c.kind == "commit_sha":
             hits = [e for e in evidence if c.value in e]
             c.state = VERIFIE if hits else INCONNU
-            c.evidence = _snip(hits[0], c.value) if hits else "SHA absent des sorties du tour"
+            c.evidence = _snip(hits[0], c.value) if hits else "SHA not in this turn's outputs"
 
         elif c.kind == "zero_fail":
             # On ne regarde QUE les sorties de lanceur. Chercher « failed » dans tout le
@@ -352,20 +372,20 @@ def judge(claims: List[Claim], evidence: List[str],
             if bilans and not any(bilans[-1][1]) and not _ERREURS.search(bilans[-1][0]):
                 c.state, c.evidence = VERIFIE, _snip(bilans[-1][0], "0")
             elif not runs:
-                c.state, c.evidence = INCONNU, "aucun lanceur dans ce tour"
+                c.state, c.evidence = INCONNU, "no test runner in this turn"
             elif not bad:
-                c.state, c.evidence = VERIFIE, f"{len(runs)} sortie(s) de lanceur, aucun échec"
+                c.state, c.evidence = VERIFIE, f"{len(runs)} runner output(s), no failure"
             elif len(runs) == 1:
                 c.state, c.evidence = REFUTE, (
-                    f"le seul lanceur du tour rapporte {max(dict(fails)[bad[0]])} échec(s)")
+                    f"the only runner in this turn reports {max(dict(fails)[bad[0]])} failure(s)")
             else:
                 # RÉFÉRENT. Plusieurs lanceurs dont certains échouent : « 0 fail » désigne
                 # l'un d'eux et rien ne dit lequel. L'unanimité ne suffit pas non plus :
                 # mesuré le 23/09, deux lanceurs en échec étaient des MUTATIONS volontaires,
                 # et la vraie suite (« total passes: 237 ») n'avait pas la forme d'un lanceur.
                 c.state, c.evidence = INCONNU, (
-                    f"{len(bad)} lanceur(s) en échec sur {len(runs)} (mutations ?), "
-                    "rien ne dit auquel l'affirmation se rapporte")
+                    f"{len(bad)} of {len(runs)} runners failing (mutation tests?), "
+                    "nothing says which one the claim refers to")
     return claims
 
 
@@ -444,7 +464,10 @@ def audit_turns(path: str, tail: Optional[int] = None):
 # dernière modification du code. Il se lit dans la SÉQUENCE DES ACTIONS, pas dans la prose.
 FIX_CLAIM = re.compile(
     r"(?<!pas )(?<!non )\b(?:est|sont|c'est|c’est|j'ai|bug|défaut|problème)\s+"
-    r"(?:bien\s+)?(?:corrigée?s?|réparée?s?|résolue?s?)\b|\bfixed\b|\bça (?:marche|fonctionne)\b",
+    r"(?:bien\s+)?(?:corrigée?s?|réparée?s?|résolue?s?)\b|\bça (?:marche|fonctionne)\b"
+    # Anglais. « This is not fixed yet » était bloqué : la négation ne valait qu'en français.
+    r"|(?<!not )(?<!n't )(?<!n’t )(?<!not yet )\bfixed\b"
+    r"|\b(?:it|this|that)\s+(?:now\s+)?works(?:\s+now)?\b|\bnow\s+works\b",
     re.I)
 # Seul du CODE exige une exécution. Mesure de la recherche du 23/09 : la même règle sur un
 # .md ou un .json accuse toute retouche de doc, qui n'a légitimement aucun test.
@@ -462,7 +485,9 @@ CODE_EXT = re.compile(
 UNRUN_ADMIT = re.compile(
     r"\b(?:je|on|nous)\s+n['’](?:ai|a|avons)\s+(?:(?:rien|pas|ni|encore|jamais|pu)\s+){1,3}"
     r"(?:compil|test)\w*"
-    r"|\b(?:haven't|have not|didn't|did not)\s+(?:yet\s+)?(?:compil|test)\w*", re.I)
+    r"|\b(?:haven't|have not|didn't|did not)\s+(?:yet\s+)?(?:compil|test)\w*"
+    r"|\b(?:haven't|have not|didn't|did not)\s+(?:yet\s+)?run\s+(?:the\s+|any\s+)?tests?",
+    re.I)
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 RUN_TOOLS = {"Bash", "PowerShell"}
 
@@ -486,8 +511,8 @@ def unrun_fix(text: str, acts) -> Optional[Claim]:
     if any(name in RUN_TOOLS for name, _ in acts[last_edit + 1:]):
         return None
     return Claim(kind="fix_sans_execution", raw=m.group(0), state=REFUTE,
-                 evidence=f"{fichier.replace(chr(92), '/').rsplit('/', 1)[-1]} modifié, "
-                          "aucune commande lancée après la dernière modification")
+                 evidence=f"{fichier.replace(chr(92), '/').rsplit('/', 1)[-1]} edited, "
+                          "no command ran after the last edit")
 
 
 # Une phrase « porteuse » = elle contient un nombre qui n'est pas une date ET un nom
@@ -543,12 +568,12 @@ def report(claims: List[Claim]) -> str:
     if not claims:
         return ""
     lines = []
-    for st, label in ((REFUTE, "REFUTE"), (INCONNU, "NON VERIFIABLE"), (VERIFIE, "verifie")):
+    for st, label in ((REFUTE, "REFUTED"), (INCONNU, "UNVERIFIABLE"), (VERIFIE, "verified")):
         sel = [c for c in claims if c.state == st]
         if sel:
             lines.append(f"  {label} ({len(sel)})")
             for c in sel:
-                lines.append(f"    - « {c.raw} » -> {c.evidence}")
+                lines.append(f'    - "{c.raw}" -> {c.evidence}')
     return "\n".join(lines)
 
 
@@ -617,15 +642,15 @@ def main():
             # UN SEUL MESSAGE COMPTE : Claude Code ignore un 2ᵉ blocage dans le même tour
             # (stop_hook_active). Il doit donc dire quoi faire, et rien d'autre : la liste
             # des « non vérifiables » noyait la seule ligne utile (bloc reçu le 23/09).
-            lignes = [f"- « {c.raw} » : {c.evidence}" for c in refutes]
+            lignes = [f'- "{c.raw}": {c.evidence}' for c in refutes]
             if any(c.kind == "fix_sans_execution" for c in refutes):
-                lignes.append("Lance les tests (ou la commande qui prouve la correction), "
-                              "puis réécris le compte-rendu d'après leur sortie.")
+                lignes.append("Run the tests (or the command that proves the fix), "
+                              "then rewrite the report from their output.")
             if any(c.kind != "fix_sans_execution" for c in refutes):
-                lignes.append("Corrige le chiffre d'après la sortie citée, ou relance la "
-                              "commande et cite sa sortie.")
+                lignes.append("Correct the number from the quoted output, or rerun the "
+                              "command and quote its output.")
             print(json.dumps({"decision": "block", "reason":
-                              f"claimcheck : {len(refutes)} affirmation(s) contredite(s).\n"
+                              f"claimcheck: {len(refutes)} claim(s) contradicted by this turn's output.\n"
                               + "\n".join(lignes)}, ensure_ascii=False))
         sys.exit(0)
 
@@ -646,26 +671,26 @@ def main():
             tot[c.state] += 1
         if any(c.state == REFUTE for c in claims):
             shown += 1
-            print(f"\n=== tour {i} — {len(ev)} sorties d'outil ===")
+            print(f"\n=== turn {i} - {len(ev)} tool outputs ===")
             print(report(claims))
     port, portee, couv = coverage(turns)
-    print(f"\n--- BILAN sur {len(turns)} tours ---")
-    print(f"verifie        : {tot[VERIFIE]}")
-    print(f"REFUTE         : {tot[REFUTE]}   (tours concernes : {shown})")
-    print(f"non verifiable : {tot[INCONNU]}")
+    print(f"\n--- SUMMARY over {len(turns)} turns ---")
+    print(f"verified       : {tot[VERIFIE]}")
+    print(f"REFUTED        : {tot[REFUTE]}   (turns affected: {shown})")
+    print(f"unverifiable   : {tot[INCONNU]}")
     # LE CHIFFRE QUI EMPÊCHE DE SE MENTIR. Sans lui, « 0 réfuté » se lit « tout est
     # vérifié » alors qu'il veut dire « je n'ai regardé qu'un tiers ». C'est exactement
     # le défaut de Get-Verdict : rendre CLEAN avec des canaux jamais examinés.
-    print(f"\nCOUVERTURE")
-    print(f"  phrases chiffrées trouvées        : {port}")
-    print(f"  dont vérifiables depuis ce tour   : {portee}")
-    print(f"  dont effectivement reconnues      : {couv}"
-          f"   ({100 * couv / max(portee, 1):.0f}% du vérifiable, "
-          f"{100 * couv / max(port, 1):.0f}% du total)")
-    print(f"  -> {portee - couv} affirmation(s) vérifiable(s) N'ONT PAS ÉTÉ REGARDÉES.")
-    print(f"  -> {port - portee} hors portée par construction (narration, citations,")
-    print("     durées : leur preuve ne vit pas dans ce tour).")
-    print("  « 0 réfuté » ne veut pas dire « tout est vrai ».")
+    print("\nCOVERAGE")
+    print(f"  sentences with a number          : {port}")
+    print(f"  of which checkable from the turn : {portee}")
+    print(f"  of which actually recognised     : {couv}"
+          f"   ({100 * couv / max(portee, 1):.0f}% of checkable, "
+          f"{100 * couv / max(port, 1):.0f}% of total)")
+    print(f"  -> {portee - couv} checkable claim(s) were NOT LOOKED AT.")
+    print(f"  -> {port - portee} out of scope by design (narration, citations,")
+    print("     durations: their evidence does not live in this turn).")
+    print('  "0 refuted" does not mean "everything is true".')
 
 
 if __name__ == "__main__":

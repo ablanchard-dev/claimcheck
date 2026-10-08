@@ -75,7 +75,7 @@ over 1,277 real turns that produced 14 refutations and none of them caught a rea
 
 ## What it blocks besides numbers
 
-"It's fixed", "ça marche", "bug corrigé" after a **code** file was edited in the turn and
+"Fixed", "it works now", "c'est corrigé" after a **code** file was edited in the turn and
 **no command ran after the last edit**. This is read from the sequence of tool calls, not from
 the wording of numbers. Documentation and config edits (`.md`, `.json`, ...) are exempt, since
 they have no test to run. Any command after the edit counts as execution. That is a deliberate
@@ -98,13 +98,14 @@ claimcheck verifies **only** claims whose evidence was produced in the turn. Not
 citations, not durations, not anything checked elsewhere. Every run prints how much it looked at:
 
 ```
-COUVERTURE
-  phrases chiffrées trouvées        : 95
-  dont vérifiables depuis ce tour   : 94
-  dont effectivement reconnues      : 12   (13% du vérifiable, 13% du total)
-  -> 82 affirmation(s) vérifiable(s) N'ONT PAS ÉTÉ REGARDÉES.
-  -> 1 hors portée par construction (narration, citations, durées).
-  « 0 réfuté » ne veut pas dire « tout est vrai ».
+COVERAGE
+  sentences with a number          : 95
+  of which checkable from the turn : 94
+  of which actually recognised     : 12   (13% of checkable, 13% of total)
+  -> 82 checkable claim(s) were NOT LOOKED AT.
+  -> 1 out of scope by design (narration, citations,
+     durations: their evidence does not live in this turn).
+  "0 refuted" does not mean "everything is true".
 ```
 
 Both denominators are printed, and the wider one is never dropped in favour of the flattering
@@ -119,12 +120,13 @@ kind that is the correct direction to be wrong in.
 
 | Bench | Result |
 |---|---|
-| Mutation proof (`test_mutation.py`) | 41/41 |
+| Mutation proof (`test_mutation.py`) | 69/69 |
 | Hook, real JSON on stdin | 16/16 |
 | False positives on two real sessions (1,277 turns, 2026-09-23) | 0 (was 14) |
 | False positives on all local sessions (378 files, 3,952 turns, 2026-09-23) | 0 (was 8 after the first fix) |
 | Same, with subagent transcripts (592 files, 4,235 turns, 2026-09-23) | 0 false alarms, 1 true positive: a deliberate probe that the **installed** hook blocked in a live session |
 | Same, two weeks later (590 files, 8,294 turns, 2026-10-06) | 0 false alarms (was 2: a fix reported *with* "nothing compiled or tested", and a true "0 failures" printed by a script after a deliberate mutation), the probe still blocked |
+| Same, after adding English forms and JS runners (567 files, 8,685 turns, 2026-10-08) | 0 false alarms (2 found during the change and fixed: a French `somme 4848 echecs` total and a `uniq -c` count of `Failed` log lines, both read as failures), the probe still blocked |
 | Hostile conditions (`test_robustesse.py`) | 17/17 |
 | Hook cost on a 4000-output transcript | 0.10 s |
 | Hook cost on a 111 MB transcript | 0.17 s (reads the last 8 MB; same verdict as a full read on all 384 local sessions, 2026-09-23) |
@@ -169,12 +171,15 @@ turn end is uninstalled the same day, and then nothing is checked at all.
 
 - Recognises five claim shapes: test counts, `0 fail`, pushed-repo counts, commit SHAs, and
   "fixed" after a code edit.
+- Reads runner counts from pytest, cargo, dotnet, jest, vitest and mocha output. `go test`
+  prints no count, so a count claimed against it stays unverifiable.
 - A single runner in the turn contradicts a test count only within a factor of 2. Beyond
-  that it may be a different suite (measured: a DrDXT total of 4,537 against a Lumenia run of
-  629), so a gross fabrication against a suite of another size is reported as unverifiable.
+  that it may be a different suite (measured: one project's total of 4,537 against a 629-test
+  run of another project), so a gross fabrication against a suite of another size is reported as unverifiable.
 - `0 fail` is refuted only when the turn has exactly one runner. With several, some failing
   on purpose (mutation testing), the referent is undetermined.
-- French and English phrasing, tested on French transcripts.
+- French and English phrasing. The real-session corpus is French, so English forms are
+  covered by witness and mutation tests only: their false-alarm rate is less measured.
 - Claim extraction is pattern-based, so an unusual phrasing is simply not seen — and that
   silence is counted in the coverage line rather than hidden.
 
