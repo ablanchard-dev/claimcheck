@@ -92,6 +92,16 @@ For "0 failures", the **last** test summary of the turn decides. A deliberate mu
 fails and is followed by a clean full run no longer refutes a true claim; a clean run followed
 by a failing one, or a `fail = 0` read in source code, proves nothing.
 
+"I reviewed all 12 files", "j'ai relu les fichiers" in a turn where **no tool other than
+an edit ran**: no read, no search, no command, no subagent. Agents announcing a complete
+review they did not do is the most frequent overclaim measured by OverclaimBench (arXiv
+2609.20812, September 2026). The rule does not count files, so any reading at all lets the
+claim through; it only catches a review announced with nothing read.
+
+"132 commits ahead", "3 commits d'avance" is compared with what `git status` printed in the
+turn (`[ahead 132]`, or the English and French long forms). Several repositories with
+different counts leave the claim unverifiable.
+
 ## The ceiling, stated up front
 
 claimcheck verifies **only** claims whose evidence was produced in the turn. Not narration, not
@@ -120,13 +130,14 @@ kind that is the correct direction to be wrong in.
 
 | Bench | Result |
 |---|---|
-| Mutation proof (`test_mutation.py`) | 69/69 |
+| Mutation proof (`test_mutation.py`) | 93/93 |
 | Hook, real JSON on stdin | 16/16 |
 | False positives on two real sessions (1,277 turns, 2026-09-23) | 0 (was 14) |
 | False positives on all local sessions (378 files, 3,952 turns, 2026-09-23) | 0 (was 8 after the first fix) |
 | Same, with subagent transcripts (592 files, 4,235 turns, 2026-09-23) | 0 false alarms, 1 true positive: a deliberate probe that the **installed** hook blocked in a live session |
 | Same, two weeks later (590 files, 8,294 turns, 2026-10-06) | 0 false alarms (was 2: a fix reported *with* "nothing compiled or tested", and a true "0 failures" printed by a script after a deliberate mutation), the probe still blocked |
 | Same, after adding English forms and JS runners (567 files, 8,685 turns, 2026-10-08) | 0 false alarms (2 found during the change and fixed: a French `somme 4848 echecs` total and a `uniq -c` count of `Failed` log lines, both read as failures), the probe still blocked |
+| Same, after adding commits-ahead, `N/N` forms and the review rule (570 files, 8,707 turns, 2026-10-08) | 0 false alarms; the review rule fired on no real turn, the probe still blocked |
 | Hostile conditions (`test_robustesse.py`) | 17/17 |
 | Hook cost on a 4000-output transcript | 0.10 s |
 | Hook cost on a 111 MB transcript | 0.17 s (reads the last 8 MB; same verdict as a full read on all 384 local sessions, 2026-09-23) |
@@ -169,8 +180,8 @@ turn end is uninstalled the same day, and then nothing is checked at all.
 
 ## Known limits
 
-- Recognises five claim shapes: test counts, `0 fail`, pushed-repo counts, commit SHAs, and
-  "fixed" after a code edit.
+- Recognises seven claim shapes: test counts, `0 fail`, pushed-repo counts, commits ahead,
+  commit SHAs, "fixed" after a code edit, and a review announced with nothing read.
 - Reads runner counts from pytest, cargo, dotnet, jest, vitest and mocha output. `go test`
   prints no count, so a count claimed against it stays unverifiable.
 - A single runner in the turn contradicts a test count only within a factor of 2. Beyond

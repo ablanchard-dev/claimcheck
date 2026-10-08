@@ -80,7 +80,23 @@ PATTERNS = [
         re.I)),
     # SHA court ou long cité comme commit
     ("commit_sha", re.compile(r"\b([0-9a-f]{7,40})\b")),
+    # Formes mesurées comme ratées sur le corpus (08/10). Le même nombre des deux côtés
+    # (\1) dit « tout passe » : « 5 sur 17 passent » n'annonce pas un total et reste muet.
+    ("test_count", re.compile(
+        r"\b(\d{1,5})\s+(?:tests?\s+)?(?:sur|of)\s+\1\s+(?:tests?\s+)?"
+        r"(?:passent|passed|pass(?:ing)?|verts?|green)\b", re.I)),
+    ("test_count", re.compile(r"\b(\d{1,5})/\1\s+tests?\b", re.I)),
+    ("test_count", re.compile(
+        r"\b(\d{1,5})\s+tests?\b[^.\n]{0,30}?\b(?:tous verts|tous passent|all green|"
+        r"all pass(?:ing)?)\b", re.I)),
+    # « 132 commits d'avance », « 3 commits ahead » : `git status` imprime le vrai chiffre.
+    ("ahead_count", re.compile(
+        r"\b(\d{1,4})\s+commits?\s+(?:d['’]avance|en avance|non pouss[ée]s|not pushed|"
+        r"unpushed|ahead)\b", re.I)),
 ]
+# `git status -sb` « [ahead 132] », `git status` anglais et français.
+AHEAD_OUT = re.compile(r"\[ahead (\d+)|ahead of '[^']*' by (\d+) commits?|"
+                       r"en avance sur '[^']*' de (\d+) commits?", re.I)
 
 # Un résultat d'outil compte comme preuve d'un compte de tests s'il contient le nombre
 # ET un marqueur de sortie de lanceur. Le nombre seul ne suffit pas : il peut venir
@@ -349,6 +365,22 @@ def judge(claims: List[Claim], evidence: List[str],
                 c.state, c.evidence = REFUTE, (
                     f"claims {c.value}, but {n} push output(s) actually found")
 
+        elif c.kind == "ahead_count":
+            # Plusieurs dépôts dans le tour = plusieurs avances : sans égalité, on ne sait
+            # pas lequel est visé. Même loi du référent que pour les comptes de tests.
+            vals = {int(next(g for g in m if g)) for e in evidence
+                    for m in AHEAD_OUT.findall(e)}
+            if not vals:
+                c.state, c.evidence = INCONNU, "no git status output in this turn"
+            elif int(c.value or -1) in vals:
+                c.state, c.evidence = VERIFIE, f"git status: ahead {c.value}"
+            elif len(vals) == 1:
+                c.state, c.evidence = REFUTE, (
+                    f"claims {c.value} commits ahead, git status says {vals.pop()}")
+            else:
+                c.state, c.evidence = INCONNU, (
+                    f"{len(vals)} different ahead counts in this turn, referent undetermined")
+
         elif c.kind == "commit_sha":
             hits = [e for e in evidence if c.value in e]
             c.state = VERIFIE if hits else INCONNU
@@ -490,6 +522,35 @@ UNRUN_ADMIT = re.compile(
     re.I)
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 RUN_TOOLS = {"Bash", "PowerShell"}
+
+
+# RELECTURE ANNONCÉE SANS LECTURE. OverclaimBench (arXiv 2609.20812, sept. 2026) : les
+# agents annoncent avoir relu tous les fichiers dans la majorité des relectures incomplètes.
+# ponytail: on ne compte pas les fichiers lus. On bloque seulement un tour où AUCUN outil
+# autre qu'une écriture n'a tourné : n'importe quelle lecture, commande ou sous-agent suffit.
+REVIEW_CLAIM = re.compile(
+    r"\b(?:j['’]ai|nous avons|on a|I(?:'ve| have)?)\s+(?:bien\s+|tout\s+)?"
+    r"(?:lu|relu|parcouru|passé en revue|read|reviewed|went through)\s+"
+    r"(?:les\s+|tous\s+les\s+|all\s+(?:the\s+)?|the\s+|every\s+)?(?:\d+\s+)?"
+    r"(?:fichiers?|files?)\b", re.I)
+
+
+def unread_review(text: str, acts) -> Optional[Claim]:
+    m = REVIEW_CLAIM.search(text or "")
+    if not m or modality(text, m.start(), m.group(0)) != "report":
+        return None
+    if any(name not in EDIT_TOOLS for name, _ in acts):
+        return None
+    return Claim(kind="relecture_sans_lecture", raw=m.group(0), state=REFUTE,
+                 evidence="no read, search, command or subagent ran in this turn")
+
+
+ACTION_KINDS = ("fix_sans_execution", "relecture_sans_lecture")
+
+
+def action_checks(text: str, acts) -> List[Claim]:
+    """Les règles qui lisent la SÉQUENCE des actions, pas les nombres."""
+    return [c for c in (unrun_fix(text, acts), unread_review(text, acts)) if c]
 
 
 def unrun_fix(text: str, acts) -> Optional[Claim]:
@@ -634,9 +695,7 @@ def main():
                 evidence, history, acts = [], [], []   # illisible : on n'accuse pas
 
         claims = judge(extract(text), evidence, history)
-        fix = unrun_fix(text, acts)
-        if fix:
-            claims.append(fix)
+        claims += action_checks(text, acts)
         refutes = [c for c in claims if c.state == REFUTE]
         if refutes:
             # UN SEUL MESSAGE COMPTE : Claude Code ignore un 2ᵉ blocage dans le même tour
@@ -646,7 +705,10 @@ def main():
             if any(c.kind == "fix_sans_execution" for c in refutes):
                 lignes.append("Run the tests (or the command that proves the fix), "
                               "then rewrite the report from their output.")
-            if any(c.kind != "fix_sans_execution" for c in refutes):
+            if any(c.kind == "relecture_sans_lecture" for c in refutes):
+                lignes.append("Open the files you say you reviewed, then rewrite the "
+                              "report from what they contain.")
+            if any(c.kind not in ACTION_KINDS for c in refutes):
                 lignes.append("Correct the number from the quoted output, or rerun the "
                               "command and quote its output.")
             print(json.dumps({"decision": "block", "reason":
@@ -662,9 +724,7 @@ def main():
     for i, (text, ev, acts) in enumerate(turns, 1):
         claims = judge(extract(text), ev, history)
         history += ev
-        fix = unrun_fix(text, acts)
-        if fix:
-            claims.append(fix)
+        claims += action_checks(text, acts)
         if not claims:
             continue
         for c in claims:

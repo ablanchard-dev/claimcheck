@@ -112,6 +112,7 @@ def main():
     ]
 
     r += test_anglais()
+    r += test_branches_0810()
     r += test_citation()
     r += test_fix_sans_execution()
 
@@ -163,6 +164,56 @@ def test_anglais():
         # ...mais un vrai bilan pytest suivi de « in » reste lu.
         check("pytest '1 failed in 0.5s' reste un echec",
               "0 failures.", ["== 1 failed, 10 passed in 0.5s =="], REFUTE),
+    ]
+
+
+def test_branches_0810():
+    """Branches ajoutees le 08/10 apres mesure du corpus : ce que l'outil ne regardait pas."""
+    print("\nCommits d'avance, formes « N sur N », relecture sans lecture")
+    SB = "## main...origin/main [ahead 132]"
+    EN = "Your branch is ahead of 'origin/main' by 5 commits."
+    FR = "Votre branche est en avance sur 'origin/main' de 132 commits."
+
+    def aucune(nom, texte):
+        ok = not [c for c in extract(texte) if c.kind == "test_count"]
+        print(f"  [{'OK  ' if ok else 'RATE'}] {nom} -> {'rien' if ok else 'extrait'}")
+        return ok
+
+    from claimcheck import unread_review
+    EDIT = ("Edit", {"file_path": r"C:\x\app\main.py"})
+
+    def rv(nom, texte, acts, doit_bloquer):
+        got = unread_review(texte, acts) is not None
+        ok = got == doit_bloquer
+        print(f"  [{'OK  ' if ok else 'RATE'}] {nom} -> {'bloque' if got else 'passe'}")
+        return ok
+
+    return [
+        check("avance, vrai", "Rien n'est poussé : le dépôt a 132 commits d'avance.", [SB], VERIFIE),
+        check("avance, faux", "Rien n'est poussé : le dépôt a 140 commits d'avance.", [SB], REFUTE),
+        check("avance, git en francais", "132 commits non poussés.", [FR], VERIFIE),
+        check("ahead, faux", "3 commits ahead, not pushed.", [EN], REFUTE),
+        check("ahead, vrai", "5 commits ahead.", [EN], VERIFIE),
+        check("avance sans sortie git", "le dépôt a 140 commits d'avance.", [PYTEST], INCONNU),
+        check("deux depots, deux avances : referent indetermine", "3 commits d'avance.",
+              ["## main...origin/main [ahead 5]", "## main...origin/main [ahead 9]"], INCONNU),
+        check("N tests sur N passent, vrai", "162 tests sur 162 passent.", [PYTEST], VERIFIE),
+        check("N sur N passent, faux", "125 sur 125 passent.", [PYTEST], REFUTE),
+        check("N/N tests, faux", "La base passe 136/136 tests.", [PYTEST], REFUTE),
+        check("N of N tests passed, faux", "170 of 170 tests passed.", [PYTEST], REFUTE),
+        check("N tests, tous verts, faux", "170 tests automatiques, tous verts.", [PYTEST], REFUTE),
+        check("N tests, all green, vrai", "162 tests, all green.", [PYTEST], VERIFIE),
+        aucune("17 projets sur 17 n'est pas un compte de tests", "Tous passent (17 projets sur 17)."),
+        aucune("5 sur 17 n'annonce pas que tout passe", "5 sur 17 passent."),
+        rv("relu sans aucune lecture", "J'ai relu les 12 fichiers, rien à signaler.", [], True),
+        rv("relu, seulement des Edit", "J'ai relu tous les fichiers.", [EDIT], True),
+        rv("relu apres Read", "J'ai relu les 12 fichiers.", [("Read", {"file_path": "a.py"})], False),
+        rv("relu apres Bash", "J'ai relu les 12 fichiers.", [("Bash", {"command": "cat a"})], False),
+        rv("relu par un sous-agent", "J'ai relu les fichiers.", [("Agent", {})], False),
+        rv("intention", "Je vais relire les 12 fichiers.", [], False),
+        rv("anglais, faux", "I reviewed all 12 files, nothing to report.", [], True),
+        rv("anglais, intention", "Next I'll review the 12 files.", [], False),
+        rv("negation", "Je n'ai pas relu les fichiers.", [], False),
     ]
 
 

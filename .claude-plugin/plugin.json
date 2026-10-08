@@ -1,7 +1,7 @@
 {
   "name": "claimcheck",
   "description": "Stop hook that checks what a coding agent says it did against what the turn shows it did. Blocks only on a contradiction: a test count the runner printed differently, or \"fixed\" after a code edit with nothing run.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": { "name": "ablanchard-dev", "url": "https://github.com/ablanchard-dev" },
   "homepage": "https://github.com/ablanchard-dev/claimcheck",
   "license": "GPL-3.0-only",

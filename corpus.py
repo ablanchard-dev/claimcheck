@@ -16,7 +16,7 @@ import os
 import sys
 
 from claimcheck import (HOOK_TAIL, REFUTE, audit_turns, extract, judge,
-                        unrun_fix)
+                        action_checks)
 
 DOSSIERS = os.path.expanduser(os.path.join("~", ".claude", "projects", "*", "*.jsonl"))
 # Les sous-agents écrivent à part (208 fichiers le 23/09), et rendent justement des
@@ -33,9 +33,7 @@ CONNUS = {("483eacde", "fix_sans_execution")}
 def juger(turns, i, hist):
     text, ev, acts = turns[i]
     claims = judge(extract(text), ev, hist)
-    fix = unrun_fix(text, acts)
-    if fix:
-        claims.append(fix)
+    claims += action_checks(text, acts)
     return claims
 
 
